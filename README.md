@@ -5,9 +5,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![TypeScript: Strict](https://img.shields.io/badge/TypeScript-Strict%20Mode-blue.svg)](tsconfig.json)
-[![Tests: 50 Passed](https://img.shields.io/badge/Tests-50%2F50%20Passing-emerald.svg)](tests/)
+[![Tests: 51 Passed](https://img.shields.io/badge/Tests-51%2F51%20Passing-emerald.svg)](tests/)
 [![WCAG: 2.2 AA](https://img.shields.io/badge/Accessibility-WCAG%202.2%20AA-teal.svg)](docs/ACCESSIBILITY_AUDIT.md)
-[![Repo Size: < 0.5 MB](https://img.shields.io/badge/Repo%20Size-0.49%20MB%20%28%3C8MB%20target%29-brightgreen.svg)](scripts/size-audit.js)
+[![Repo Size: < 0.6 MB](https://img.shields.io/badge/Repo%20Size-0.55%20MB%20%28%3C8MB%20target%29-brightgreen.svg)](scripts/size-audit.js)
 
 ---
 
@@ -157,7 +157,7 @@ GEMINI_MODEL=gemini-2.5-flash
 | **Server Dev** | `npm run dev:server` | Starts backend in watch mode via `tsx`. |
 | **Client Dev** | `npm run dev:client` | Starts Vite development server with API proxying. |
 | **Typecheck** | `npm run typecheck` | Strictly typechecks root, shared, server, and client code. |
-| **Automated Tests** | `npm test` | Runs the complete 50-test suite across Unit, API, Component, and E2E suites. |
+| **Automated Tests** | `npm test` | Runs the complete 51-test suite across Unit, API, Component, and E2E suites. |
 | **Production Build**| `npm run build` | Compiles optimized client bundle (`dist/client`) and server (`dist/server`). |
 | **Start Production**| `npm start` | Launches compiled production Express server hosting static client files. |
 | **Size Audit** | `npm run size-audit` | Audits repository size and confirms zero tracked secrets. |
@@ -166,20 +166,20 @@ GEMINI_MODEL=gemini-2.5-flash
 
 ## 6. Verified Automated Test Results
 
-The test suite was executed and passed with **100% success** (50 tests passing across 7 suites):
+The test suite was executed and passed with **100% success** (51 tests passing across 7 suites):
 
 ```text
- ✓ tests/unit/impact-engine.test.ts (5 tests) 15ms
- ✓ tests/unit/safety-rules.test.ts (6 tests) 23ms
- ✓ tests/unit/aqi-classification.test.ts (14 tests) 26ms
- ✓ tests/unit/schemas-and-validation.test.ts (7 tests) 23ms
- ✓ tests/e2e/workflow.test.ts (1 test) 242ms
- ✓ tests/integration/api-endpoints.test.ts (11 tests) 269ms
- ✓ tests/component/ui-components.test.tsx (6 tests) 186ms
+ ✓ tests/unit/safety-rules.test.ts (6 tests)
+ ✓ tests/unit/aqi-classification.test.ts (14 tests)
+ ✓ tests/unit/impact-engine.test.ts (5 tests)
+ ✓ tests/unit/schemas-and-validation.test.ts (7 tests)
+ ✓ tests/e2e/workflow.test.ts (1 test)
+ ✓ tests/integration/api-endpoints.test.ts (12 tests)
+ ✓ tests/component/ui-components.test.tsx (6 tests)
 
  Test Files  7 passed (7)
-      Tests  50 passed (50)
-   Duration  10.86s
+      Tests  51 passed (51)
+   Duration  4.73s
 ```
 
 ---
