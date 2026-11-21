@@ -97,3 +97,4 @@ export const ImpactCard: React.FC<ImpactCardProps> = ({ impact, compact = false 
     </div>
   );
 };
+

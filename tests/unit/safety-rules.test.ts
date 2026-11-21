@@ -75,3 +75,4 @@ describe('Safety Rules Engine Unit Tests', () => {
     expect(safety.urgentMedicalAdvisory).toContain('AirWise AI provides environmental health education and general wellness guidance only');
   });
 });
+

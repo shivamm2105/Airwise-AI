@@ -103,3 +103,4 @@ export const PollutantCard: React.FC<PollutantCardProps> = ({
     </div>
   );
 };
+

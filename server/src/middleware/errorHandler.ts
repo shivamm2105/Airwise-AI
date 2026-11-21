@@ -41,3 +41,4 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     timestamp: new Date().toISOString()
   });
 };
+

@@ -215,3 +215,4 @@ export const AssistantPage: React.FC<AssistantPageProps> = ({ airQuality, prefer
     </div>
   );
 };
+

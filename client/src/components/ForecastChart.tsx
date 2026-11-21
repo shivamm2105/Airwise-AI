@@ -111,3 +111,4 @@ export const ForecastChart: React.FC<ForecastChartProps> = ({ hourly }) => {
     </div>
   );
 };
+

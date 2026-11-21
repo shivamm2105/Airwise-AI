@@ -127,3 +127,4 @@ export const AQIBadge: React.FC<AQIBadgeProps> = ({
     </div>
   );
 };
+

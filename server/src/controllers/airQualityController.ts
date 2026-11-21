@@ -57,3 +57,4 @@ export async function searchLocations(req: Request, res: Response, next: NextFun
     next(err);
   }
 }
+

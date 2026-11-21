@@ -1,9 +1,10 @@
 import React from 'react';
 import { AirQualityData, LocationCoordinates } from '@shared/types';
+import { NavTab } from '../components/Navbar';
 import { AQIBadge } from '../components/AQIBadge';
 import { PollutantCard } from '../components/PollutantCard';
 import { ForecastChart } from '../components/ForecastChart';
-import { MapPin, RefreshCw, AlertTriangle, Database, Info, Loader2 } from 'lucide-react';
+import { MapPin, RefreshCw, AlertTriangle, Database, Info, Loader2, ArrowRight } from 'lucide-react';
 
 interface DashboardPageProps {
   data: AirQualityData | null;
@@ -12,6 +13,7 @@ interface DashboardPageProps {
   onRefresh: () => void;
   onOpenLocation: () => void;
   currentLocation: LocationCoordinates | null;
+  onNavigate?: (tab: NavTab) => void;
 }
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({
@@ -20,7 +22,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   error,
   onRefresh,
   onOpenLocation,
-  currentLocation
+  currentLocation,
+  onNavigate
 }) => {
   if (loading && !data) {
     return (
@@ -140,6 +143,50 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         size="lg"
       />
 
+      {/* Quick Feature Navigation Workflow */}
+      {onNavigate && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <button
+            onClick={() => onNavigate('plan')}
+            className="p-3.5 rounded-xl bg-gradient-to-r from-teal-900/50 to-emerald-950/50 border border-teal-500/40 hover:border-teal-400 text-left flex items-center justify-between group transition-all"
+          >
+            <div>
+              <span className="font-bold text-white text-xs block group-hover:text-teal-300">
+                Personalized Daily Plan
+              </span>
+              <span className="text-[11px] text-slate-300">Time-bracketed routine for today</span>
+            </div>
+            <ArrowRight className="w-4 h-4 text-teal-400 group-hover:translate-x-1 transition-transform shrink-0" />
+          </button>
+
+          <button
+            onClick={() => onNavigate('assistant')}
+            className="p-3.5 rounded-xl bg-gradient-to-r from-sky-900/50 to-navy-800 border border-sky-500/40 hover:border-sky-400 text-left flex items-center justify-between group transition-all"
+          >
+            <div>
+              <span className="font-bold text-white text-xs block group-hover:text-sky-300">
+                Ask AI Assistant
+              </span>
+              <span className="text-[11px] text-slate-300">Grounded outdoor & health guidance</span>
+            </div>
+            <ArrowRight className="w-4 h-4 text-sky-400 group-hover:translate-x-1 transition-transform shrink-0" />
+          </button>
+
+          <button
+            onClick={() => onNavigate('indoor')}
+            className="p-3.5 rounded-xl bg-gradient-to-r from-navy-800 to-navy-900 border border-slate-700 hover:border-amber-400 text-left flex items-center justify-between group transition-all"
+          >
+            <div>
+              <span className="font-bold text-white text-xs block group-hover:text-amber-300">
+                Indoor Clean Air Zone
+              </span>
+              <span className="text-[11px] text-slate-300">HEPA sizing & window ventilation</span>
+            </div>
+            <ArrowRight className="w-4 h-4 text-amber-400 group-hover:translate-x-1 transition-transform shrink-0" />
+          </button>
+        </div>
+      )}
+
       {/* Primary Pollutants Grid */}
       <section aria-labelledby="pollutants-heading">
         <div className="flex items-center justify-between mb-3">
@@ -220,3 +267,4 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     </div>
   );
 };
+

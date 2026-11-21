@@ -79,3 +79,4 @@ export const SafetyAlertBanner: React.FC<SafetyAlertBannerProps> = ({ safety }) 
     </div>
   );
 };
+

@@ -284,3 +284,4 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onOpenLoca
     </div>
   );
 };
+

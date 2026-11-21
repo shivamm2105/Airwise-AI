@@ -25,3 +25,4 @@ export const aiRateLimiter = rateLimit({
     message: 'Assistant message rate limit reached. Please pause a moment before submitting your next question.'
   }
 });
+

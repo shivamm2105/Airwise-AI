@@ -86,3 +86,4 @@ Contains pure TypeScript contracts, domain models, and deterministic engines sha
 3. **Dual Impact Distinction**:
    - **Personal Exposure Benefit**: Explains biological lung protection (e.g., N95 respirators, HEPA filters).
    - **Environmental Emission Benefit**: Explains source pollution prevention (e.g., switching from private cars to metro transit).
+

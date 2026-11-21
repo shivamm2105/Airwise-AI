@@ -119,3 +119,4 @@ describe('Frontend Component Tests', () => {
     });
   });
 });
+

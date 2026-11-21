@@ -39,3 +39,4 @@ A comprehensive cybersecurity audit was performed across the AirWise AI codebase
 ### Threat 3: Denial of Service via Loopback Inundation
 - **Attack Vector**: Flooding the chat endpoint with high-frequency AI generation requests.
 - **Mitigation**: `aiRateLimiter` restricts IP requests to 40 per 15-minute window. When limits are exceeded, a structured HTTP 429 response is returned with explicit retry guidance.
+

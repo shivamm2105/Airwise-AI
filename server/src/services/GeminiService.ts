@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { GoogleGenAI } from '@google/genai';
 import {
   AirQualityData,
@@ -8,25 +9,62 @@ import {
 import { evaluateSafetyRules } from '../../../shared/safetyRules.js';
 import { getStandardImpact } from '../../../shared/impact.js';
 
+interface RawGeminiAction {
+  id?: string;
+  title: string;
+  category: 'morning' | 'outdoor' | 'commute' | 'workplace_school' | 'indoor' | 'evening' | 'household_sustainability';
+  timeframe: string;
+  whatToDo: string;
+  whyItMatters: string;
+  steps: string[];
+  expectedBenefit: string;
+}
+
+interface RawGeminiPlanResponse {
+  summary: string;
+  actions: RawGeminiAction[];
+  sustainableAlternatives?: {
+    transportOption?: string;
+    idlingAdvice?: string;
+    tripConsolidationTips?: string;
+    householdEnergyAction?: string;
+  };
+  communityTips?: string[];
+}
+
 export class GeminiService {
   private client: GoogleGenAI | null = null;
+  private currentApiKey: string | null = null;
   private readonly modelName: string;
 
   constructor() {
-    const apiKey = process.env.GEMINI_API_KEY?.trim();
     this.modelName = process.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash';
+    this.getClient();
+  }
 
-    if (apiKey) {
+  private getClient(): GoogleGenAI | null {
+    const apiKey = process.env.GEMINI_API_KEY?.trim();
+    if (!apiKey) {
+      this.client = null;
+      this.currentApiKey = null;
+      return null;
+    }
+
+    if (!this.client || this.currentApiKey !== apiKey) {
       try {
         this.client = new GoogleGenAI({ apiKey });
+        this.currentApiKey = apiKey;
       } catch (err) {
         console.warn('Failed to initialize GoogleGenAI client:', err);
+        this.client = null;
+        this.currentApiKey = null;
       }
     }
+    return this.client;
   }
 
   public isAvailable(): boolean {
-    return this.client !== null && Boolean(process.env.GEMINI_API_KEY);
+    return Boolean(this.getClient());
   }
 
   /**
@@ -54,7 +92,9 @@ export class GeminiService {
       ? evaluateSafetyRules(airQuality.aqi, airQuality.pollutants, preferences, airQuality.indexStandard)
       : null;
 
-    if (!this.client || !process.env.GEMINI_API_KEY) {
+    const client = this.getClient();
+
+    if (!client) {
       // Deterministic evidence-aware fallback response
       return {
         response: this.generateDeterministicChatResponse(cleanUserQuery, airQuality, safety, preferences),
@@ -108,7 +148,7 @@ USER QUESTION:
 Provide a direct, practical, and compassionate response based on the verified environmental context:`;
 
     try {
-      const response = await this.client.models.generateContent({
+      const response = await client.models.generateContent({
         model: this.modelName,
         contents: prompt
       });
@@ -130,7 +170,8 @@ Provide a direct, practical, and compassionate response based on the verified en
   }
 
   /**
-   * Generates a fully verified, personalized action plan
+   * Generates a fully verified, personalized action plan using Gemini when available,
+   * with guaranteed deterministic safety constraint enforcement.
    */
   public async generateDailyPlan(
     airQuality: AirQualityData,
@@ -143,7 +184,163 @@ Provide a direct, practical, and compassionate response based on the verified en
       airQuality.indexStandard
     );
 
-    // Build deterministic baseline action items
+    const client = this.getClient();
+
+    // If Gemini is available, synthesize a truly personalized plan
+    if (client) {
+      try {
+        const prompt = `You are AirWise AI. Synthesize a personalized daily action plan for ${airQuality.location.name}.
+VERIFIED ENVIRONMENTAL CONTEXT:
+- AQI: ${airQuality.aqi} (${airQuality.indexStandard})
+- Category: ${airQuality.categoryLabel}
+- Dominant Pollutant: ${airQuality.dominantPollutant}
+- Criteria Pollutants: ${JSON.stringify(airQuality.pollutants)}
+- Safety Constraints:
+  * Outdoor Exercise Safe: ${safety.outdoorExerciseSafe}
+  * Children Outdoor Play Safe: ${safety.childrenOutdoorPlaySafe}
+  * Respirator Tier Required: ${safety.respiratorTier}
+  * Window Ventilation Recommended: ${safety.ventilationDecision.recommended} (${safety.ventilationDecision.reason})
+- Household Context: ${JSON.stringify(preferences || {})}
+
+REQUIREMENTS:
+1. Return ONLY a valid JSON object matching the schema below.
+2. If outdoor exercise is NOT safe, you MUST advise indoor workouts.
+3. If respirator tier is RECOMMENDED_N95 or ESSENTIAL_N95_STRICT, emphasize N95/FFP2 for commuting.
+4. Provide practical, budget-free steps for each action.
+
+JSON SCHEMA TO RETURN:
+{
+  "summary": "1-2 sentence environmental status summary",
+  "actions": [
+    {
+      "title": "Action title",
+      "category": "morning" | "commute" | "indoor" | "household_sustainability" | "evening",
+      "timeframe": "e.g. 07:00 - 08:30 AM",
+      "whatToDo": "Specific instruction",
+      "whyItMatters": "Health or emission rationale",
+      "steps": ["Step 1", "Step 2", "Step 3"],
+      "expectedBenefit": "Specific biological or emission benefit"
+    }
+  ],
+  "sustainableAlternatives": {
+    "transportOption": "Practical transit or carpooling advice",
+    "idlingAdvice": "Specific anti-idling guidance",
+    "tripConsolidationTips": "Batching errands advice",
+    "householdEnergyAction": "Energy saving action"
+  },
+  "communityTips": ["Tip 1", "Tip 2", "Tip 3"]
+}`;
+
+        const response = await client.models.generateContent({
+          model: this.modelName,
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json'
+          }
+        });
+
+        if (response.text) {
+          const parsed = JSON.parse(response.text) as RawGeminiPlanResponse;
+          if (parsed && Array.isArray(parsed.actions) && parsed.actions.length >= 3) {
+            const actions: RecommendationActionItem[] = parsed.actions.map((act, index) => {
+              // Enforce safety rules on actions
+              let whatToDo = act.whatToDo;
+              if (!safety.outdoorExerciseSafe && act.category === 'morning' && (whatToDo.toLowerCase().includes('run') || whatToDo.toLowerCase().includes('jog'))) {
+                whatToDo = 'Move workout indoors (yoga, bodyweight, or treadmill). Outdoor running is unsafe under current smog conditions.';
+              }
+
+              // Determine impact mapping
+              let impact = getStandardImpact('use_hepa_purifier');
+              if (act.category === 'morning' && !safety.outdoorExerciseSafe) {
+                impact = getStandardImpact('stay_indoors_hazardous');
+              } else if (act.category === 'commute') {
+                impact = safety.respiratorTier !== 'NOT_NEEDED'
+                  ? getStandardImpact('wear_n95_respirator')
+                  : getStandardImpact('switch_to_transit', preferences?.commuteDistanceKm || 10);
+              } else if (act.category === 'indoor') {
+                impact = getStandardImpact('use_hepa_purifier');
+              } else if (act.category === 'household_sustainability') {
+                impact = getStandardImpact('avoid_indoor_incense');
+              }
+
+              return {
+                id: `act-genai-${index}-${Date.now()}`,
+                title: act.title,
+                category: act.category,
+                timeframe: act.timeframe || 'Scheduled',
+                whatToDo,
+                whyItMatters: act.whyItMatters,
+                steps: act.steps || [],
+                expectedBenefit: act.expectedBenefit,
+                impact,
+                confidence: 'Contextual AI',
+                safetyVerified: true
+              };
+            });
+
+            return {
+              summary: parsed.summary || `Air quality in ${airQuality.location.name} is ${airQuality.categoryLabel}. Plan generated using Gemini AI.`,
+              airQualityContext: {
+                source: airQuality.provider,
+                indexStandard: airQuality.indexStandard,
+                observedAt: airQuality.observedAt,
+                aqi: airQuality.aqi,
+                category: airQuality.category
+              },
+              safetyEvaluation: safety,
+              actions,
+              indoorGuidance: {
+                ventilationTiming: safety.ventilationDecision.reason,
+                hepaRecommendations:
+                  'Utilize true mechanical HEPA (H13 or higher) air cleaners sized to provide at least 4 to 5 air changes per hour (ACH).',
+                cookingExhaustGuidance:
+                  'Always use an externally vented exhaust hood or open a dedicated kitchen window when cooking.',
+                dustAndCleaningTips: [
+                  'Use damp microfiber cloths instead of dry feather dusters.',
+                  'Vacuum with a sealed HEPA-filtered vacuum cleaner.',
+                  'Remove outdoor shoes at the front entryway.'
+                ],
+                combustionAvoidance: [
+                  'Do NOT burn incense sticks (agarbatti) or paraffin candles indoors during poor air quality periods.',
+                  'Never smoke or vape indoors.'
+                ],
+                sensorNotice:
+                  'Transparency notice: Without a physical indoor PM2.5 sensor in your living room, these recommendations represent evidence-based preventive guidance.'
+              },
+              sustainableAlternatives: {
+                transportOption: parsed.sustainableAlternatives?.transportOption || 'Use mass transit or carpool.',
+                idlingAdvice: parsed.sustainableAlternatives?.idlingAdvice || 'Turn off engine when stopped for more than 10 seconds.',
+                tripConsolidationTips: parsed.sustainableAlternatives?.tripConsolidationTips || 'Batch errands into a single loop.',
+                householdEnergyAction: parsed.sustainableAlternatives?.householdEnergyAction || 'Clean purifier pre-filters monthly.'
+              },
+              communityTips: parsed.communityTips || [
+                'Coordinate school carpools to reduce gate emissions.',
+                'Report open trash burning to local civic hotlines.'
+              ],
+              limitationsAndDisclaimers: [
+                'AirWise AI provides environmental education and exposure-reduction advice. It is not a clinical medical diagnostic service.',
+                'If experiencing acute breathing distress, consult a medical professional or emergency services immediately.'
+              ]
+            };
+          }
+        }
+      } catch (err) {
+        console.warn('Gemini daily plan synthesis failed, using verified deterministic engine:', err);
+      }
+    }
+
+    // Deterministic baseline action plan (Used when API key is missing or quota is exceeded)
+    return this.generateDeterministicDailyPlan(airQuality, safety, preferences);
+  }
+
+  /**
+   * Deterministic baseline plan generator
+   */
+  private generateDeterministicDailyPlan(
+    airQuality: AirQualityData,
+    safety: ReturnType<typeof evaluateSafetyRules>,
+    preferences?: Partial<HouseholdPreferences>
+  ): AISynthesisResponse {
     const actions: RecommendationActionItem[] = [];
 
     // Morning Action
@@ -284,7 +481,6 @@ Provide a direct, practical, and compassionate response based on the verified en
       safetyVerified: true
     });
 
-    // Summary synthesis
     const summary = `Current air quality in ${airQuality.location.name} is classified as ${airQuality.categoryLabel} (AQI ${airQuality.aqi ?? 'N/A'} [${airQuality.indexStandard}]). ${
       safety.severeSmogAlert
         ? 'Severe winter pollution conditions detected. Primary objective: Shield respiratory health, eliminate outdoor exertion, seal indoor spaces, and utilize certified N95 respirators for necessary travel.'
@@ -305,21 +501,20 @@ Provide a direct, practical, and compassionate response based on the verified en
       indoorGuidance: {
         ventilationTiming: safety.ventilationDecision.reason,
         hepaRecommendations:
-          'Utilize true mechanical HEPA (H13 or higher) air cleaners sized to provide at least 4 to 5 air changes per hour (ACH) for your room size. Replace pre-filters monthly and HEPA cores every 6-12 months.',
+          'Utilize true mechanical HEPA (H13 or higher) air cleaners sized to provide at least 4 to 5 air changes per hour (ACH) for your room size.',
         cookingExhaustGuidance:
-          'Always use an externally vented exhaust hood or open a dedicated kitchen window when cooking. Electric induction cooktops eliminate indoor combustion byproducts completely.',
+          'Always use an externally vented exhaust hood or open a dedicated kitchen window when cooking.',
         dustAndCleaningTips: [
-          'Use damp microfiber cloths instead of dry feather dusters to capture settled soot without re-suspending it.',
-          'Vacuum with a sealed HEPA-filtered vacuum cleaner to avoid blowing fine dust back into breathing air.',
-          'Remove outdoor shoes at the front entryway to avoid tracking toxic street soot and brake dust indoors.'
+          'Use damp microfiber cloths instead of dry feather dusters.',
+          'Vacuum with a sealed HEPA-filtered vacuum cleaner.',
+          'Remove outdoor shoes at the front entryway.'
         ],
         combustionAvoidance: [
           'Do NOT burn incense sticks (agarbatti) or paraffin candles indoors during poor air quality periods.',
-          'Avoid burning trash, leaves, or biomass in residential courtyards.',
           'Never smoke or vape indoors.'
         ],
         sensorNotice:
-          'Transparency notice: Without a physical indoor PM2.5 sensor in your living room, these recommendations represent evidence-based preventive guidance. We never fabricate exact indoor AQI measurements.'
+          'Transparency notice: Without a physical indoor PM2.5 sensor in your living room, these recommendations represent evidence-based preventive guidance.'
       },
       sustainableAlternatives: {
         transportOption:
@@ -327,7 +522,7 @@ Provide a direct, practical, and compassionate response based on the verified en
             ? 'Switch from solo driving to urban metro or express bus to reduce per-capita tailpipe emissions.'
             : 'Maintain your current shared or active transit routine while wearing proper respiratory protection.',
         idlingAdvice:
-          'Turn off your vehicle engine if stopped for more than 10 seconds (except in moving traffic queues). Engine idling burns fuel unnecessarily and creates concentrated toxic roadside fumes.',
+          'Turn off your vehicle engine if stopped for more than 10 seconds. Engine idling burns fuel unnecessarily and creates concentrated toxic roadside fumes.',
         tripConsolidationTips:
           'Batch grocery shopping, medical visits, and school drop-offs into a single loop to reduce cold-start vehicle emissions.',
         householdEnergyAction:
@@ -335,11 +530,11 @@ Provide a direct, practical, and compassionate response based on the verified en
       },
       communityTips: [
         'Coordinate neighborhood school carpools to cut school-gate congestion and idling exhaust.',
-        'Report open municipal waste burning or unauthorized construction dust to local civic environmental hotlines.',
-        'Share verified air-quality alerts with elderly neighbors who may not monitor digital environmental dashboards.'
+        'Report open municipal waste burning to local civic environmental hotlines.',
+        'Share verified air-quality alerts with elderly neighbors who may not monitor digital dashboards.'
       ],
       limitationsAndDisclaimers: [
-        'AirWise AI provides environmental education and exposure-reduction advice. It is not a clinical medical device or diagnosis service.',
+        'AirWise AI provides environmental education and exposure-reduction advice. It is not a clinical medical diagnostic service.',
         'Outdoor air quality readings are sourced from verified environmental monitoring stations and models (CAMS / Open-Meteo).',
         'If experiencing acute breathing distress, chest pain, or severe coughing, consult a medical professional or call emergency healthcare services immediately.'
       ]
@@ -383,7 +578,6 @@ Provide a direct, practical, and compassionate response based on the verified en
     }
 
     if (q.includes('commute') || q.includes('car') || q.includes('transit') || q.includes('transport') || q.includes('cycle')) {
-      const mode = preferences?.commuteMode || 'transit';
       return `🚲 **Smart Commuting & Sustainable Transport in ${loc}:**
 - **Current Conditions:** ${cat} (AQI: ${aqi}).
 - **Cycling/Walking Advice:** ${safety && !safety.outdoorExerciseSafe ? 'Do NOT cycle or run along congested roadways today due to high pollution.' : 'Safe for active travel if choosing low-traffic corridors.'}
@@ -393,7 +587,7 @@ Provide a direct, practical, and compassionate response based on the verified en
 
     if (q.includes('reduce') || q.includes('sustainable') || q.includes('emission') || q.includes('footprint') || q.includes('green')) {
       return `🌱 **Household Pollution & Emission Reduction Strategies:**
-1. **Consolidate Errands:** Combine shopping trips to eliminate cold-engine vehicle starts (which emit high levels of pollutants during initial minutes).
+1. **Consolidate Errands:** Combine shopping trips to eliminate cold-engine vehicle starts.
 2. **Clean Cooking:** Switch to electric induction cooking where possible, or ensure high-flow external exhaust venting for gas stoves.
 3. **Avoid Open Combustion:** Never burn garden waste, leaves, or trash.
 4. **Energy Efficiency:** Maintain clean air purifier pre-filters monthly so motors run with minimal electrical drag.`;

@@ -31,3 +31,4 @@ export const corsMiddleware: RequestHandler = cors({
   credentials: true,
   maxAge: 86400 // 24 hours preflight cache
 });
+

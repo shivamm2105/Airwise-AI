@@ -4,14 +4,18 @@ import { airQualityCache } from './CacheService.js';
 import { AirQualityData, LocationCoordinates } from '../../../shared/types.js';
 
 export class AirQualityService {
-  private provider: AirQualityProvider;
+  private customProvider: AirQualityProvider | null = null;
 
   constructor(provider?: AirQualityProvider) {
-    this.provider = provider || ProviderFactory.getProvider();
+    if (provider) this.customProvider = provider;
   }
 
-  public setProvider(provider: AirQualityProvider): void {
-    this.provider = provider;
+  public setProvider(provider: AirQualityProvider | null): void {
+    this.customProvider = provider;
+  }
+
+  private getProvider(): AirQualityProvider {
+    return this.customProvider || ProviderFactory.getProvider();
   }
 
   private generateCacheKey(lat: number, lon: number): string {
@@ -31,7 +35,8 @@ export class AirQualityService {
     }
 
     try {
-      const freshData = await this.provider.getAirQuality(coords);
+      const provider = this.getProvider();
+      const freshData = await provider.getAirQuality(coords);
       airQualityCache.set(cacheKey, freshData);
       return freshData;
     } catch (err: unknown) {
@@ -46,13 +51,12 @@ export class AirQualityService {
           }
         };
       }
-      // Otherwise throw error
       throw err;
     }
   }
 
   public async searchLocations(query: string): Promise<LocationCoordinates[]> {
-    return this.provider.searchLocations(query);
+    return this.getProvider().searchLocations(query);
   }
 }
 

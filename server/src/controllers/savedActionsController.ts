@@ -91,3 +91,4 @@ export function updatePreferences(req: Request, res: Response, next: NextFunctio
     next(err);
   }
 }
+

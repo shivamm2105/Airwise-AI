@@ -55,3 +55,4 @@ npm test
 | **Sensitive Group Exposure (AQI: 125)** | `safety-rules.test.ts` | Flags outdoor play unsafe for children and respiratory sensitive members. |
 | **Offline / Unreachable API Upstream** | `e2e/workflow.test.ts` | Gracefully falls back to deterministic rule engine or cached stale readings. |
 | **Active Commute in Smog** | `safety-rules.test.ts` | Blocks cycling/jogging recommendation; advises enclosed mass transit with N95. |
+

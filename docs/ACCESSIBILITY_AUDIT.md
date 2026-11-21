@@ -50,3 +50,4 @@ AirWise AI is designed to meet **WCAG 2.2 Level AA** accessibility standards to 
 - Buttons and interactive touch elements maintain minimum dimensions of 44x44 CSS pixels on mobile screens.
 - Form controls and search bars include generous padding to prevent mis-clicks on handheld devices.
 - Responsive design tested from 320px mobile viewports up to 4K ultra-wide displays without horizontal overflow.
+

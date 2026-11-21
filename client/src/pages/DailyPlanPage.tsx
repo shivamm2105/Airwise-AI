@@ -240,3 +240,4 @@ export const DailyPlanPage: React.FC<DailyPlanPageProps> = ({
     </div>
   );
 };
+

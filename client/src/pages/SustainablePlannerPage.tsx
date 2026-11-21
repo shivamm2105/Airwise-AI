@@ -34,6 +34,7 @@ export const SustainablePlannerPage: React.FC<SustainablePlannerPageProps> = ({
     assumptions: string;
     uncertaintyRange: string;
   } | null>(null);
+  const [savedCommuteSuccess, setSavedCommuteSuccess] = useState(false);
 
   const outdoorAQI = airQuality?.aqi ?? 120;
   const isOutdoorUnhealthy = outdoorAQI > 150;
@@ -236,6 +237,44 @@ export const SustainablePlannerPage: React.FC<SustainablePlannerPageProps> = ({
                 <span className="w-1.5 h-1.5 rounded-full bg-slate-500 mt-1.5 shrink-0" />
                 <span>{impactResult.uncertaintyRange}</span>
               </p>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={async () => {
+                  try {
+                    const modeTitle =
+                      selectedAlternative === 'public_transit'
+                        ? 'Switch Solo Car Commute to Metro / Transit'
+                        : selectedAlternative === 'carpool'
+                        ? 'Share Vehicle Rides via 2+ Person Carpool'
+                        : selectedAlternative === 'bicycle'
+                        ? 'Active Cycling Commute (When AQI Permits)'
+                        : selectedAlternative === 'walk'
+                        ? 'Active Walking Routine for Short Trips'
+                        : 'Work From Home to Eliminate Tailpipe Travel';
+
+                    await api.saveAction({
+                      actionId: `act-commute-${selectedAlternative}`,
+                      title: modeTitle,
+                      category: 'commute',
+                      locationName: airQuality?.location.name || 'Current City',
+                      aqiAtSave: airQuality?.aqi ?? null
+                    });
+                    setSavedCommuteSuccess(true);
+                    setTimeout(() => setSavedCommuteSuccess(false), 3000);
+                  } catch {
+                    alert('Unable to save commute action right now.');
+                  }
+                }}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-md transition-colors"
+              >
+                {savedCommuteSuccess ? (
+                  <span>Saved to My Actions!</span>
+                ) : (
+                  <span>Commit this Commute Habit to My Plan</span>
+                )}
+              </button>
             </div>
           </div>
         )}

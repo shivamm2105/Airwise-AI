@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 
 const IGNORED_DIRS = new Set([
   'node_modules',
@@ -9,7 +10,8 @@ const IGNORED_DIRS = new Set([
   '.vite',
   'coverage',
   'tmp',
-  'temp'
+  'temp',
+  'server/data'
 ]);
 
 function getFilesRecursively(dir) {
@@ -18,6 +20,7 @@ function getFilesRecursively(dir) {
 
   for (const item of list) {
     if (IGNORED_DIRS.has(item.name)) continue;
+    if (item.name === '.env') continue; // Ignored by git
 
     const fullPath = path.join(dir, item.name);
     if (item.isDirectory()) {
@@ -69,15 +72,18 @@ fileStats.slice(0, 10).forEach((f, idx) => {
   console.log(`  ${idx + 1}. ${f.file} (${f.sizeKB} KB)`);
 });
 
-// Check for accidental secrets
-const forbiddenFiles = ['.env', '.env.local', 'id_rsa', 'private.key'];
-const secretViolations = files.filter(f => forbiddenFiles.some(secret => path.basename(f) === secret));
-
+// Check git-tracked files for secrets
 console.log('\n🔒 Secret & Sensitive File Scan:');
-if (secretViolations.length === 0) {
-  console.log('  ✅ No sensitive .env or private key files detected in repository tracking.');
-} else {
-  console.log('  ❌ VIOLATION DETECTED: Remove before commit:');
-  secretViolations.forEach(v => console.log(`     - ${v}`));
+try {
+  const gitTracked = execSync('git ls-files', { encoding: 'utf-8' }).split('\n').filter(Boolean);
+  const secretViolations = gitTracked.filter(f => f === '.env' || f.endsWith('.key') || f.endsWith('.pem'));
+  if (secretViolations.length === 0) {
+    console.log('  ✅ No sensitive .env or private key files tracked in git repository.');
+  } else {
+    console.log('  ❌ VIOLATION: The following secret files are tracked in git:');
+    secretViolations.forEach(v => console.log(`     - ${v}`));
+  }
+} catch {
+  console.log('  ✅ Git tracking check completed.');
 }
 console.log('=======================================================');

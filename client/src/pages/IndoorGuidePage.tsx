@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AirQualityData, HouseholdPreferences } from '@shared/types';
+import { api } from '../services/api';
 import {
   Home,
   Wind,
@@ -17,11 +18,22 @@ interface IndoorGuidePageProps {
   onUpdatePreferences?: (prefs: HouseholdPreferences) => void;
 }
 
-export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({ airQuality }) => {
+export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({ airQuality, preferences, onUpdatePreferences }) => {
   const [roomSizeSqFt, setRoomSizeSqFt] = useState<number>(200);
-  const [hasHEPA, setHasHEPA] = useState<boolean>(true);
-  const [cookingType, setCookingType] = useState<string>('gas_exhaust');
-  const [usesIncense, setUsesIncense] = useState<boolean>(false);
+  const [hasHEPA, setHasHEPA] = useState<boolean>(preferences?.hasAirPurifier ?? true);
+  const [cookingType, setCookingType] = useState<string>(
+    preferences?.cookingType === 'induction_electric'
+      ? 'induction'
+      : preferences?.cookingType === 'gas_unvented'
+      ? 'gas_unvented'
+      : preferences?.cookingType === 'biomass_chulha'
+      ? 'biomass'
+      : 'gas_exhaust'
+  );
+  const [usesIncense, setUsesIncense] = useState<boolean>(
+    (preferences?.indoorCombustionSources?.length ?? 0) > 0
+  );
+  const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
 
   // Compute recommended CADR (Clean Air Delivery Rate)
   // CADR (cfm) = (Room Volume in cu ft * ACH) / 60
@@ -32,6 +44,42 @@ export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({ airQuality }) 
 
   const outdoorAQI = airQuality?.aqi ?? 150;
   const isOutdoorSevere = outdoorAQI > 150;
+
+  const handleSaveIndoorProfile = async () => {
+    const updatedCooking =
+      cookingType === 'induction'
+        ? 'induction_electric'
+        : cookingType === 'gas_unvented'
+        ? 'gas_unvented'
+        : cookingType === 'biomass'
+        ? 'biomass_chulha'
+        : 'gas_with_exhaust';
+
+    const updatedPrefs: HouseholdPreferences = {
+      householdSize: preferences?.householdSize || 3,
+      hasChildren: preferences?.hasChildren || false,
+      hasElderly: preferences?.hasElderly || false,
+      hasRespiratorySensitivity: preferences?.hasRespiratorySensitivity || false,
+      commuteMode: preferences?.commuteMode || 'public_transit',
+      commuteDistanceKm: preferences?.commuteDistanceKm || 10,
+      homeType: preferences?.homeType || 'apartment',
+      ventilationType: preferences?.ventilationType || 'natural_cross',
+      hasAirPurifier: hasHEPA,
+      purifierFilterType: hasHEPA ? 'HEPA' : 'none',
+      cookingType: updatedCooking,
+      indoorCombustionSources: usesIncense ? ['incense_agarbatti', 'candles'] : [],
+      sustainabilityFocus: preferences?.sustainabilityFocus || 'exposure_reduction'
+    };
+
+    try {
+      const res = await api.updatePreferences(updatedPrefs);
+      if (onUpdatePreferences) onUpdatePreferences(res);
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 3000);
+    } catch {
+      alert('Unable to save indoor profile right now.');
+    }
+  };
 
   return (
     <div className="space-y-6 py-4 max-w-5xl mx-auto">
@@ -182,6 +230,22 @@ export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({ airQuality }) 
             </span>
             <span className="text-[10px] text-slate-400 block">(~{Math.round(recommendedCADR * 1.7)} m³/h)</span>
           </div>
+        </div>
+
+        <div className="flex justify-end pt-1">
+          <button
+            onClick={handleSaveIndoorProfile}
+            className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs flex items-center gap-2 shadow-md transition-colors"
+          >
+            {savedSuccess ? (
+              <>
+                <CheckCircle className="w-4 h-4 text-emerald-300" />
+                <span>Saved to Profile!</span>
+              </>
+            ) : (
+              <span>Save Indoor Setup to Household Profile</span>
+            )}
+          </button>
         </div>
       </div>
 

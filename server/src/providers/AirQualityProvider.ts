@@ -13,3 +13,4 @@ export interface AirQualityProvider {
    */
   searchLocations(query: string): Promise<LocationCoordinates[]>;
 }
+

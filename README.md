@@ -198,3 +198,4 @@ The test suite was executed and passed with **100% success** (50 tests passing a
 ## 8. License
 
 Distributed under the MIT License. Developed for **PromptWars Virtual Challenge 6**.
+

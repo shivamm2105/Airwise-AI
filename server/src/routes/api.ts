@@ -50,3 +50,4 @@ router.get('/preferences', getPreferences);
 router.post('/preferences', updatePreferences);
 
 export default router;
+

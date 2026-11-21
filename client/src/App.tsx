@@ -100,6 +100,7 @@ export const App: React.FC = () => {
             onRefresh={() => loadAirQuality(currentLocation)}
             onOpenLocation={() => setLocationModalOpen(true)}
             currentLocation={currentLocation}
+            onNavigate={setCurrentTab}
           />
         )}
 
@@ -164,3 +165,4 @@ export const App: React.FC = () => {
 };
 
 export default App;
+

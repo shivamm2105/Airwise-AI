@@ -140,19 +140,34 @@ export class OpenMeteoProvider implements AirQualityProvider {
       return Number(v.toFixed(1));
     };
 
+    // Open-Meteo reports carbon monoxide in µg/m³; convert to mg/m³ for standard health reference
+    let coValue: number | null = null;
+    if (current.carbon_monoxide !== undefined && current.carbon_monoxide !== null && !isNaN(current.carbon_monoxide)) {
+      coValue = Number((current.carbon_monoxide / 1000).toFixed(2));
+    } else {
+      missingPollutants.push('CO');
+    }
+
     const pollutants: PollutantMeasurements = {
       pm2_5: getVal(current.pm2_5, 'PM2.5'),
       pm10: getVal(current.pm10, 'PM10'),
       no2: getVal(current.nitrogen_dioxide, 'NO2'),
       so2: getVal(current.sulphur_dioxide, 'SO2'),
       o3: getVal(current.ozone, 'O3'),
-      co: getVal(current.carbon_monoxide, 'CO')
+      co: coValue
     };
 
     // Determine regional standard
+    const nameLower = (coords.name || '').toLowerCase();
     const isIndia =
       coords.country?.toLowerCase() === 'india' ||
       coords.country?.toLowerCase() === 'in' ||
+      nameLower.includes('delhi') ||
+      nameLower.includes('mumbai') ||
+      nameLower.includes('bengaluru') ||
+      nameLower.includes('kolkata') ||
+      nameLower.includes('chennai') ||
+      nameLower.includes('hyderabad') ||
       (coords.latitude >= 8.0 && coords.latitude <= 37.0 && coords.longitude >= 68.0 && coords.longitude <= 97.5);
 
     let standard: AQIStandard = 'US_AQI';
@@ -291,3 +306,4 @@ export class OpenMeteoProvider implements AirQualityProvider {
     }
   }
 }
+

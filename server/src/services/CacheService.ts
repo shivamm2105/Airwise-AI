@@ -59,3 +59,4 @@ export class CacheService {
 }
 
 export const airQualityCache = new CacheService(15, 300);
+
