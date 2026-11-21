@@ -7,6 +7,7 @@ import {
   saveAction,
   toggleActionCompletion,
   deleteAction,
+  clearAllActions,
   exportSummary,
   getPreferences,
   updatePreferences
@@ -42,6 +43,7 @@ router.post('/chat', aiRateLimiter, handleChatMessage);
 // Saved Actions & Preferences Endpoints
 router.get('/saved-actions', getSavedActions);
 router.post('/saved-actions', saveAction);
+router.delete('/saved-actions', clearAllActions);
 router.patch('/saved-actions/:id/toggle', toggleActionCompletion);
 router.delete('/saved-actions/:id', deleteAction);
 router.get('/saved-actions/export', exportSummary);

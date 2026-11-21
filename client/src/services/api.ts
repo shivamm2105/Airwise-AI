@@ -133,6 +133,12 @@ export const api = {
     });
   },
 
+  clearAllActions: async (): Promise<{ success: boolean }> => {
+    return request<{ success: boolean }>('/saved-actions', {
+      method: 'DELETE'
+    });
+  },
+
   exportSummary: async () => {
     return request('/saved-actions/export');
   },

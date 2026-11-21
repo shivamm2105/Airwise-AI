@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { AirQualityData, HouseholdPreferences } from '@shared/types';
 import { api } from '../services/api';
 import { Bot, Send, Sparkles, User, AlertCircle, Loader2 } from 'lucide-react';
@@ -37,6 +37,15 @@ export const AssistantPage: React.FC<AssistantPageProps> = ({ airQuality, prefer
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, loading]);
 
   const handleSendMessage = async (textToSend?: string) => {
     const query = (textToSend || input).trim();
@@ -168,6 +177,7 @@ export const AssistantPage: React.FC<AssistantPageProps> = ({ airQuality, prefer
             </div>
           </div>
         )}
+        <div ref={messagesEndRef} />
       </div>
 
       {/* Suggested Prompt Pills */}

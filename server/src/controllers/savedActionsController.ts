@@ -49,6 +49,15 @@ export function deleteAction(req: Request, res: Response, next: NextFunction): v
   }
 }
 
+export function clearAllActions(_req: Request, res: Response, next: NextFunction): void {
+  try {
+    storageService.clearAllActions();
+    res.json({ success: true, message: 'All saved actions cleared successfully' });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export function exportSummary(_req: Request, res: Response, next: NextFunction): void {
   try {
     const actions = storageService.getSavedActions();

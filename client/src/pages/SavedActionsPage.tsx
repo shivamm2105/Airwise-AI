@@ -57,6 +57,19 @@ export const SavedActionsPage: React.FC<SavedActionsPageProps> = () => {
     }
   };
 
+  const handleClearAll = async () => {
+    if (actions.length === 0) return;
+    if (!window.confirm('Are you sure you want to clear all saved actions? This cannot be undone.')) {
+      return;
+    }
+    try {
+      await api.clearAllActions();
+      setActions([]);
+    } catch {
+      alert('Unable to clear saved actions.');
+    }
+  };
+
   const handleExport = async () => {
     try {
       const summary = await api.exportSummary();
@@ -100,14 +113,26 @@ export const SavedActionsPage: React.FC<SavedActionsPageProps> = () => {
           </div>
         </div>
 
-        <button
-          onClick={handleExport}
-          disabled={actions.length === 0}
-          className="px-4 py-2 rounded-xl bg-navy-900 border border-slate-700 hover:border-teal-500/50 text-slate-200 text-xs font-semibold flex items-center gap-2 disabled:opacity-40 transition-colors self-start sm:self-center"
-        >
-          <Download className="w-4 h-4 text-teal-400" />
-          <span>Export Summary Report</span>
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-center">
+          <button
+            onClick={handleClearAll}
+            disabled={actions.length === 0}
+            className="px-3.5 py-2 rounded-xl bg-navy-900 border border-slate-700 hover:border-rose-500/50 hover:text-rose-300 text-slate-300 text-xs font-semibold flex items-center gap-1.5 disabled:opacity-40 transition-colors"
+            title="Remove all saved actions from local storage"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+            <span>Clear All</span>
+          </button>
+
+          <button
+            onClick={handleExport}
+            disabled={actions.length === 0}
+            className="px-4 py-2 rounded-xl bg-navy-900 border border-slate-700 hover:border-teal-500/50 text-slate-200 text-xs font-semibold flex items-center gap-2 disabled:opacity-40 transition-colors"
+          >
+            <Download className="w-4 h-4 text-teal-400" />
+            <span>Export Summary</span>
+          </button>
+        </div>
       </div>
 
       {/* Progress & Stats Card */}

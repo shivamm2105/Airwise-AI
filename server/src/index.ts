@@ -31,6 +31,22 @@ if (staticPath) {
     }
     res.sendFile(path.join(staticPath, 'index.html'));
   });
+} else {
+  // Informational fallback when running dev server without built assets
+  app.get('/', (_req, res) => {
+    res.json({
+      product: 'AirWise AI — Intelligent Urban Air Quality Assistant',
+      status: 'API server active',
+      endpoints: {
+        health: '/api/health',
+        currentAirQuality: '/api/air-quality/current?city=New%20Delhi',
+        dailyPlan: '/api/recommendations/daily-plan',
+        assistant: '/api/chat',
+        savedActions: '/api/saved-actions'
+      },
+      note: 'Frontend client is running via Vite or can be compiled using "npm run build".'
+    });
+  });
 }
 
 // 404 Route Handler for unmatched API paths

@@ -156,6 +156,27 @@ describe('Server API Integration Tests', () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
     });
+
+    it('clears all actions', async () => {
+      // Create a temporary action to verify clearing
+      await request(app)
+        .post('/api/saved-actions')
+        .send({
+          actionId: 'test-act-clear',
+          title: 'Temporary Action to be Cleared',
+          category: 'indoor',
+          locationName: 'London',
+          aqiAtSave: 45
+        });
+
+      const clearRes = await request(app).delete('/api/saved-actions');
+      expect(clearRes.status).toBe(200);
+      expect(clearRes.body.success).toBe(true);
+
+      const listRes = await request(app).get('/api/saved-actions');
+      expect(listRes.status).toBe(200);
+      expect(listRes.body.actions.length).toBe(0);
+    });
   });
 });
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, MapPin, Navigation, X, Check, Loader2, AlertCircle } from 'lucide-react';
 import { LocationCoordinates } from '@shared/types';
 import { api } from '../services/api';
@@ -32,6 +32,18 @@ export const LocationModal: React.FC<LocationModalProps> = ({
   const [searching, setSearching] = useState(false);
   const [geolocating, setGeolocating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // WCAG 2.2 AA: Close modal on Escape key press
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
