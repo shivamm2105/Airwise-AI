@@ -118,12 +118,14 @@ export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({ airQuality, pr
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
           {/* Room Size */}
           <div className="p-4 rounded-xl bg-navy-900 border border-slate-800 space-y-2">
-            <label className="font-semibold text-slate-300 block">Room Floor Area</label>
+            <label htmlFor="room-size-range" className="font-semibold text-slate-300 block">Room Floor Area</label>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-extrabold text-teal-400">{roomSizeSqFt}</span>
               <span className="text-slate-400">sq. ft. (~{Math.round(roomSizeSqFt * 0.093)} m²)</span>
             </div>
             <input
+              id="room-size-range"
+              aria-label="Room Floor Area in square feet"
               type="range"
               min="100"
               max="600"

@@ -103,10 +103,12 @@ export const SustainablePlannerPage: React.FC<SustainablePlannerPageProps> = ({
         {/* Distance Slider */}
         <div className="p-4 rounded-xl bg-navy-900 border border-slate-800 space-y-2">
           <div className="flex items-center justify-between text-xs">
-            <label className="font-semibold text-slate-300">Roundtrip Daily Commute Distance:</label>
+            <label htmlFor="commute-distance-range" className="font-semibold text-slate-300">Roundtrip Daily Commute Distance:</label>
             <span className="text-lg font-extrabold text-teal-400">{distanceKm} km</span>
           </div>
           <input
+            id="commute-distance-range"
+            aria-label="Roundtrip Daily Commute Distance in kilometers"
             type="range"
             min="2"
             max="60"

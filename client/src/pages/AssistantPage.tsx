@@ -206,6 +206,7 @@ export const AssistantPage: React.FC<AssistantPageProps> = ({ airQuality, prefer
         >
           <input
             type="text"
+            aria-label="Ask assistant a question about air quality or health"
             value={input}
             onChange={e => setInput(e.target.value)}
             placeholder="Ask anything about air quality, masks, purifiers, commuting, or health..."

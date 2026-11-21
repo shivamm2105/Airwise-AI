@@ -139,9 +139,11 @@ export const FamilyCommunityPage: React.FC<FamilyCommunityPageProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 text-xs">
           {/* Family Size */}
           <div className="p-4 rounded-xl bg-navy-900 border border-slate-800 space-y-2">
-            <label className="font-semibold text-slate-300 block">Number of Household Members</label>
+            <label htmlFor="household-size-input" className="font-semibold text-slate-300 block">Number of Household Members</label>
             <div className="flex items-center gap-3">
               <input
+                id="household-size-input"
+                aria-label="Number of Household Members"
                 type="number"
                 min="1"
                 max="15"
@@ -200,8 +202,10 @@ export const FamilyCommunityPage: React.FC<FamilyCommunityPageProps> = ({
 
           {/* Commute Mode */}
           <div className="p-4 rounded-xl bg-navy-900 border border-slate-800 space-y-2">
-            <label className="font-semibold text-slate-300 block">Primary Commute Mode</label>
+            <label htmlFor="commute-mode-select" className="font-semibold text-slate-300 block">Primary Commute Mode</label>
             <select
+              id="commute-mode-select"
+              aria-label="Primary Commute Mode"
               value={commuteMode}
               onChange={e => setCommuteMode(e.target.value as HouseholdPreferences['commuteMode'])}
               className="w-full p-2.5 rounded-lg bg-navy-800 border border-slate-700 text-white text-xs focus:border-purple-500 focus:outline-none"
@@ -217,9 +221,11 @@ export const FamilyCommunityPage: React.FC<FamilyCommunityPageProps> = ({
 
           {/* Commute Distance */}
           <div className="p-4 rounded-xl bg-navy-900 border border-slate-800 space-y-2">
-            <label className="font-semibold text-slate-300 block">Daily Commute Distance</label>
+            <label htmlFor="commute-distance-input" className="font-semibold text-slate-300 block">Daily Commute Distance</label>
             <div className="flex items-center gap-3">
               <input
+                id="commute-distance-input"
+                aria-label="Daily Commute Distance in kilometers"
                 type="number"
                 min="0"
                 max="100"
@@ -233,8 +239,10 @@ export const FamilyCommunityPage: React.FC<FamilyCommunityPageProps> = ({
 
           {/* Sustainability Focus */}
           <div className="p-4 rounded-xl bg-navy-900 border border-slate-800 space-y-2">
-            <label className="font-semibold text-slate-300 block">Primary Sustainability Goal</label>
+            <label htmlFor="sustainability-focus-select" className="font-semibold text-slate-300 block">Primary Sustainability Goal</label>
             <select
+              id="sustainability-focus-select"
+              aria-label="Primary Sustainability Goal"
               value={sustainabilityFocus}
               onChange={e => setSustainabilityFocus(e.target.value as HouseholdPreferences['sustainabilityFocus'])}
               className="w-full p-2.5 rounded-lg bg-navy-800 border border-slate-700 text-white text-xs focus:border-purple-500 focus:outline-none"

@@ -138,6 +138,7 @@ export const LocationModal: React.FC<LocationModalProps> = ({
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
+              aria-label="Search city or monitoring station worldwide"
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search any city worldwide (e.g. Delhi, London, Seattle)..."

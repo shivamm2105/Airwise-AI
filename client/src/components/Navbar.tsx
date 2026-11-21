@@ -105,7 +105,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex items-center gap-2.5">
             <button
               onClick={onOpenLocationModal}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-navy-800 border border-slate-700/80 text-xs font-medium text-slate-200 hover:border-teal-500/60 hover:text-teal-300 transition-all shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-2 min-h-[44px] rounded-lg bg-navy-800 border border-slate-700/80 text-xs font-medium text-slate-200 hover:border-teal-500/60 hover:text-teal-300 transition-all shadow-sm"
               aria-label={`Current location: ${currentLocation ? currentLocation.name : 'Select location'}. Click to change.`}
             >
               <MapPin className="w-3.5 h-3.5 text-teal-400" aria-hidden="true" />
@@ -117,7 +117,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Mobile Hamburger Toggle */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2 rounded-lg bg-navy-800 border border-slate-700 text-slate-300 hover:text-white focus:outline-none"
+              className="lg:hidden p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg bg-navy-800 border border-slate-700 text-slate-300 hover:text-white focus:outline-none"
               aria-expanded={mobileMenuOpen}
               aria-label={mobileMenuOpen ? 'Close Navigation Menu' : 'Open Navigation Menu'}
             >

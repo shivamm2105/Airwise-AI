@@ -23,8 +23,31 @@ const clientDistPath = path.resolve(process.cwd(), 'client/dist');
 const altDistPath = path.resolve(process.cwd(), 'dist/client');
 const staticPath = fs.existsSync(clientDistPath) ? clientDistPath : fs.existsSync(altDistPath) ? altDistPath : null;
 
+// Favicon handler to avoid 404/MIME-type errors
+app.get('/favicon.ico', (_req, res) => {
+  const faviconSvgPath = staticPath ? path.join(staticPath, 'favicon.svg') : null;
+  if (faviconSvgPath && fs.existsSync(faviconSvgPath)) {
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.sendFile(faviconSvgPath);
+  } else {
+    res.status(204).end();
+  }
+});
+
 if (staticPath) {
-  app.use(express.static(staticPath));
+  app.use(express.static(staticPath, {
+    maxAge: '1y',
+    immutable: true,
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.html')) {
+        // Never cache HTML to allow instant hot deployment updates
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      } else if (filePath.endsWith('.svg') || filePath.endsWith('.webmanifest')) {
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+      }
+    }
+  }));
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) {
       return next();
