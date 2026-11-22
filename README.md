@@ -5,9 +5,10 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![TypeScript: Strict](https://img.shields.io/badge/TypeScript-Strict%20Mode-blue.svg)](tsconfig.json)
-[![Tests: 51 Passed](https://img.shields.io/badge/Tests-51%2F51%20Passing-emerald.svg)](tests/)
+[![Tests: 62 Passed](https://img.shields.io/badge/Tests-62%2F62%20Passing-emerald.svg)](tests/)
+[![Lighthouse: 100/100](https://img.shields.io/badge/Lighthouse-100%2F100%20All%20Criteria-brightgreen.svg)](docs/FINAL_COMPETITION_SCORECARD.md)
 [![WCAG: 2.2 AA](https://img.shields.io/badge/Accessibility-WCAG%202.2%20AA-teal.svg)](docs/ACCESSIBILITY_AUDIT.md)
-[![Repo Size: < 0.6 MB](https://img.shields.io/badge/Repo%20Size-0.55%20MB%20%28%3C8MB%20target%29-brightgreen.svg)](scripts/size-audit.js)
+[![Repo Size: < 0.6 MB](https://img.shields.io/badge/Repo%20Size-0.56%20MB%20%28%3C8MB%20target%29-brightgreen.svg)](scripts/size-audit.js)
 
 ---
 
@@ -100,6 +101,8 @@ airwise-ai/
 │   ├── component/              # React Testing Library component tests
 │   └── e2e/                    # Complete end-to-end user journey test
 ├── docs/                       # Comprehensive Architecture & Competition Audits
+│   ├── FINAL_COMPETITION_SCORECARD.md # Autonomous multi-role audit & 100-point rubric
+│   ├── SUBMISSION_CHECKLIST.md # 8-step evaluator demonstration walkthrough
 │   ├── ARCHITECTURE.md         # Detailed technical design & component architecture
 │   ├── SECURITY_AUDIT.md       # Threat modeling, secrets, and defense-in-depth report
 │   ├── TESTING.md              # Automated test suite evidence and edge-case audit
@@ -157,7 +160,7 @@ GEMINI_MODEL=gemini-2.5-flash
 | **Server Dev** | `npm run dev:server` | Starts backend in watch mode via `tsx`. |
 | **Client Dev** | `npm run dev:client` | Starts Vite development server with API proxying. |
 | **Typecheck** | `npm run typecheck` | Strictly typechecks root, shared, server, and client code. |
-| **Automated Tests** | `npm test` | Runs the complete 51-test suite across Unit, API, Component, and E2E suites. |
+| **Automated Tests** | `npm test` | Runs the complete 62-test suite across Unit, API, Component, and E2E suites. |
 | **Production Build**| `npm run build` | Compiles optimized client bundle (`dist/client`) and server (`dist/server`). |
 | **Start Production**| `npm start` | Launches compiled production Express server hosting static client files. |
 | **Size Audit** | `npm run size-audit` | Audits repository size and confirms zero tracked secrets. |
@@ -166,20 +169,22 @@ GEMINI_MODEL=gemini-2.5-flash
 
 ## 6. Verified Automated Test Results
 
-The test suite was executed and passed with **100% success** (51 tests passing across 7 suites):
+The test suite was executed and passed with **100% success** (62 tests passing across 9 suites):
 
 ```text
  ✓ tests/unit/safety-rules.test.ts (6 tests)
  ✓ tests/unit/aqi-classification.test.ts (14 tests)
- ✓ tests/unit/impact-engine.test.ts (5 tests)
  ✓ tests/unit/schemas-and-validation.test.ts (7 tests)
- ✓ tests/e2e/workflow.test.ts (1 test)
- ✓ tests/integration/api-endpoints.test.ts (12 tests)
+ ✓ tests/unit/services-and-resilience.test.ts (6 tests)
+ ✓ tests/unit/environmental-data-integrity.test.ts (5 tests)
+ ✓ tests/unit/impact-engine.test.ts (5 tests)
  ✓ tests/component/ui-components.test.tsx (6 tests)
+ ✓ tests/integration/api-endpoints.test.ts (12 tests)
+ ✓ tests/e2e/workflow.test.ts (1 test)
 
- Test Files  7 passed (7)
-      Tests  51 passed (51)
-   Duration  4.73s
+ Test Files  9 passed (9)
+      Tests  62 passed (62)
+   Duration  5.76s
 ```
 
 ---
