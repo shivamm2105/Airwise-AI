@@ -19,6 +19,8 @@ out/
 coverage/
 *.lcov
 .nyc_output/
+lighthouse-*.json
+lighthouse-report/
 
 # Cache and logs
 .cache/

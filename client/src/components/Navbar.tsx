@@ -65,7 +65,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             onClick={() => handleNavClick('landing')}
             className="flex items-center gap-2.5 text-left group focus:outline-none"
-            aria-label="AirWise AI Home"
           >
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-teal-500 to-emerald-400 flex items-center justify-center text-navy-900 shadow-md group-hover:scale-105 transition-transform">
               <Wind className="w-5 h-5" aria-hidden="true" />

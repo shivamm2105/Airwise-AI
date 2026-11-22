@@ -23,6 +23,13 @@ const clientDistPath = path.resolve(process.cwd(), 'client/dist');
 const altDistPath = path.resolve(process.cwd(), 'dist/client');
 const staticPath = fs.existsSync(clientDistPath) ? clientDistPath : fs.existsSync(altDistPath) ? altDistPath : null;
 
+// Robots.txt handler to ensure valid plain-text SEO response
+app.get('/robots.txt', (_req, res) => {
+  res.setHeader('Content-Type', 'text/plain');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.send("User-agent: *\nAllow: /\n");
+});
+
 // Favicon handler to avoid 404/MIME-type errors
 app.get('/favicon.ico', (_req, res) => {
   const faviconSvgPath = staticPath ? path.join(staticPath, 'favicon.svg') : null;
