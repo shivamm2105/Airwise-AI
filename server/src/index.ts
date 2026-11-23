@@ -91,8 +91,8 @@ app.use('/api/*', (req, res) => {
 // Centralized Error Handler
 app.use(errorHandler);
 
-// Listen only when not running inside a test runner
-if (process.env.NODE_ENV !== 'test') {
+// Listen only when not running inside a test runner or serverless environment
+if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
   app.listen(PORT, () => {
     console.log(`=======================================================`);
     console.log(`🚀 AirWise AI Server is running on port ${PORT}`);

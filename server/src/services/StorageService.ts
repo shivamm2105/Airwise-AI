@@ -20,7 +20,8 @@ export class StorageService {
   private data: StorageSchema;
 
   constructor(customPath?: string) {
-    const dir = path.resolve(process.cwd(), 'server/data');
+    const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+    const dir = isServerless ? '/tmp' : path.resolve(process.cwd(), 'server/data');
     if (!fs.existsSync(dir)) {
       try {
         fs.mkdirSync(dir, { recursive: true });
