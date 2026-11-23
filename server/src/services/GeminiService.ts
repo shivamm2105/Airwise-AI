@@ -38,7 +38,7 @@ export class GeminiService {
   private readonly modelName: string;
 
   constructor() {
-    this.modelName = process.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash';
+    this.modelName = process.env.GEMINI_MODEL?.trim() || 'gemini-3.5-flash-lite';
     this.getClient();
   }
 
@@ -65,6 +65,46 @@ export class GeminiService {
 
   public isAvailable(): boolean {
     return Boolean(this.getClient());
+  }
+
+  /**
+   * Executes Gemini API calls with intelligent multi-model cascade across active Gemini models
+   * to guarantee zero downtime during demand spikes (503) or model transitions (404).
+   */
+  private async executeGeminiCascade(
+    client: GoogleGenAI,
+    contents: string,
+    config?: Record<string, unknown>
+  ): Promise<{ text: string; modelUsed: string }> {
+    const candidateModels = [
+      process.env.GEMINI_MODEL?.trim(),
+      'gemini-3.5-flash-lite',
+      'gemini-3.1-flash-lite',
+      'gemini-3.5-flash',
+      'gemini-3.8-flash'
+    ].filter(Boolean) as string[];
+
+    const uniqueCandidates = Array.from(new Set(candidateModels));
+    let lastError: unknown = null;
+
+    for (const model of uniqueCandidates) {
+      try {
+        const response = await client.models.generateContent({
+          model,
+          contents,
+          ...(config ? { config } : {})
+        });
+        if (response && response.text) {
+          return { text: response.text, modelUsed: model };
+        }
+      } catch (err: unknown) {
+        lastError = err;
+        const errObj = err as { status?: number; message?: string };
+        console.warn(`[GeminiService] Model ${model} unavailable (${errObj?.status || errObj?.message || 'unknown error'}), attempting next candidate...`);
+      }
+    }
+
+    throw lastError || new Error('All candidate Gemini models were unavailable.');
   }
 
   /**
@@ -148,15 +188,10 @@ USER QUESTION:
 Provide a direct, practical, and compassionate response based on the verified environmental context:`;
 
     try {
-      const response = await client.models.generateContent({
-        model: this.modelName,
-        contents: prompt
-      });
-
-      const text = response.text || 'I apologize, but I could not synthesize a complete response at this moment.';
+      const { text, modelUsed } = await this.executeGeminiCascade(client, prompt);
       return {
         response: text,
-        usedModel: this.modelName,
+        usedModel: modelUsed,
         groundedInContext: true
       };
     } catch (err) {
@@ -231,16 +266,12 @@ JSON SCHEMA TO RETURN:
   "communityTips": ["Tip 1", "Tip 2", "Tip 3"]
 }`;
 
-        const response = await client.models.generateContent({
-          model: this.modelName,
-          contents: prompt,
-          config: {
-            responseMimeType: 'application/json'
-          }
+        const { text } = await this.executeGeminiCascade(client, prompt, {
+          responseMimeType: 'application/json'
         });
 
-        if (response.text) {
-          const parsed = JSON.parse(response.text) as RawGeminiPlanResponse;
+        if (text) {
+          const parsed = JSON.parse(text) as RawGeminiPlanResponse;
           if (parsed && Array.isArray(parsed.actions) && parsed.actions.length >= 3) {
             const actions: RecommendationActionItem[] = parsed.actions.map((act, index) => {
               // Enforce safety rules on actions
