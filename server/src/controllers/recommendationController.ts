@@ -9,8 +9,8 @@ const PlanRequestSchema = z.object({
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
   locationName: z.string().default('Current Location'),
-  country: z.string().optional(),
-  region: z.string().optional(),
+  country: z.string().nullable().optional(),
+  region: z.string().nullable().optional(),
   preferences: HouseholdPreferencesSchema.partial().optional()
 });
 
@@ -22,8 +22,8 @@ export async function getDailyPlan(req: Request, res: Response, next: NextFuncti
       latitude: payload.latitude,
       longitude: payload.longitude,
       name: payload.locationName,
-      country: payload.country,
-      region: payload.region
+      country: payload.country || undefined,
+      region: payload.region || undefined
     });
 
     const plan = await geminiService.generateDailyPlan(airQuality, payload.preferences);

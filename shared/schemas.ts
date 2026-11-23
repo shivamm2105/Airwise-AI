@@ -4,9 +4,9 @@ export const LocationCoordinatesSchema = z.object({
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
   name: z.string().min(1).max(120),
-  region: z.string().optional(),
-  country: z.string().optional(),
-  timezone: z.string().optional()
+  region: z.string().nullable().optional(),
+  country: z.string().nullable().optional(),
+  timezone: z.string().nullable().optional()
 });
 
 export const LocationQuerySchema = z.object({

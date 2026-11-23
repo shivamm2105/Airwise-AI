@@ -78,11 +78,12 @@ export const AssistantPage: React.FC<AssistantPageProps> = ({ airQuality, prefer
       };
 
       setMessages(prev => [...prev, assistantMsg]);
-    } catch {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'I encountered an issue connecting to the inference server. Please check your network connection or try again in a moment.';
       const errorMsg: ChatMessage = {
         id: `err-${Date.now()}`,
         sender: 'assistant',
-        text: 'I encountered an issue connecting to the inference server. Please check your network connection or try again in a moment.',
+        text: msg,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         modelUsed: 'System Notice'
       };

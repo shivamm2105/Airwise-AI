@@ -11,7 +11,14 @@ export async function handleChatMessage(req: Request, res: Response, next: NextF
     let airQuality: AirQualityData | null = null;
     if (payload.location) {
       try {
-        airQuality = await airQualityService.getAirQualityByCoordinates(payload.location);
+        airQuality = await airQualityService.getAirQualityByCoordinates({
+          latitude: payload.location.latitude,
+          longitude: payload.location.longitude,
+          name: payload.location.name,
+          country: payload.location.country || undefined,
+          region: payload.location.region || undefined,
+          timezone: payload.location.timezone || undefined
+        });
       } catch (err) {
         console.warn('Failed to fetch live context for chat, continuing with partial context:', err);
       }

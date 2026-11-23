@@ -49,8 +49,9 @@ export const DailyPlanPage: React.FC<DailyPlanPageProps> = ({
         preferences: preferences || undefined
       });
       setPlan(res);
-    } catch {
-      setError('Failed to generate daily action plan. Please try again.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to generate daily action plan. Please try again.';
+      setError(msg);
     } finally {
       setLoading(false);
     }

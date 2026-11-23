@@ -22,18 +22,34 @@ export const helmetMiddleware: RequestHandler = helmet({
   crossOriginEmbedderPolicy: false
 });
 
-const allowedOrigin = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
+const allowedOrigin = process.env.CLIENT_ORIGIN;
 
 export const corsMiddleware: RequestHandler = cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (e.g. mobile apps, curl, server-to-server) or localhost in dev
-    if (!origin || origin === allowedOrigin || origin.startsWith('http://localhost:')) {
-      callback(null, true);
-    } else {
-      callback(new Error(`CORS blocked for origin: ${origin}`));
+    // 1. Allow requests with no origin (e.g. mobile apps, curl, server-to-server, SSR)
+    if (!origin) {
+      return callback(null, true);
     }
+
+    // 2. Allow explicitly configured client origin
+    if (allowedOrigin && origin === allowedOrigin) {
+      return callback(null, true);
+    }
+
+    // 3. Allow localhost and 127.0.0.1 on any port during local development
+    if (/^https?:\/\/localhost(:\d+)?$/.test(origin) || /^https?:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) {
+      return callback(null, true);
+    }
+
+    // 4. Allow any Vercel production or preview deployment (*.vercel.app)
+    if (/^https:\/\/[a-zA-Z0-9_-]+\.vercel\.app$/.test(origin)) {
+      return callback(null, true);
+    }
+
+    // Reject other unauthorized origins safely without crashing
+    callback(null, false);
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
   maxAge: 86400 // 24 hours preflight cache
