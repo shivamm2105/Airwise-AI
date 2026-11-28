@@ -78,17 +78,41 @@ describe('AQI Classification Unit Tests', () => {
     });
   });
 
-  describe('Edge Cases and Missing Values', () => {
-    it('handles null AQI gracefully without crash', () => {
-      const res = classifyAQI(null);
-      expect(res.category).toBe('UNKNOWN');
-      expect(res.label).toBe('Data Unavailable');
+  describe('Exact Boundary & Edge Cases', () => {
+    it('accurately differentiates US_AQI boundary thresholds (50, 51, 100, 101, 150, 151, 200, 201, 300, 301)', () => {
+      expect(classifyAQI(0, 'US_AQI').category).toBe('GOOD');
+      expect(classifyAQI(50, 'US_AQI').category).toBe('GOOD');
+      expect(classifyAQI(51, 'US_AQI').category).toBe('MODERATE');
+      expect(classifyAQI(100, 'US_AQI').category).toBe('MODERATE');
+      expect(classifyAQI(101, 'US_AQI').category).toBe('UNHEALTHY_SENSITIVE');
+      expect(classifyAQI(150, 'US_AQI').category).toBe('UNHEALTHY_SENSITIVE');
+      expect(classifyAQI(151, 'US_AQI').category).toBe('UNHEALTHY');
+      expect(classifyAQI(200, 'US_AQI').category).toBe('UNHEALTHY');
+      expect(classifyAQI(201, 'US_AQI').category).toBe('VERY_UNHEALTHY');
+      expect(classifyAQI(300, 'US_AQI').category).toBe('VERY_UNHEALTHY');
+      expect(classifyAQI(301, 'US_AQI').category).toBe('HAZARDOUS');
     });
 
-    it('handles NaN AQI gracefully without crash', () => {
-      const res = classifyAQI(NaN);
-      expect(res.category).toBe('UNKNOWN');
-      expect(res.label).toBe('Data Unavailable');
+    it('accurately differentiates CPCB_AQI boundary thresholds (50, 100, 101, 200, 201, 300, 301, 400, 401)', () => {
+      expect(classifyAQI(0, 'CPCB_AQI').label).toBe('Good (CPCB)');
+      expect(classifyAQI(50, 'CPCB_AQI').label).toBe('Good (CPCB)');
+      expect(classifyAQI(51, 'CPCB_AQI').label).toBe('Satisfactory (CPCB)');
+      expect(classifyAQI(100, 'CPCB_AQI').label).toBe('Satisfactory (CPCB)');
+      expect(classifyAQI(101, 'CPCB_AQI').category).toBe('MODERATE');
+      expect(classifyAQI(200, 'CPCB_AQI').category).toBe('MODERATE');
+      expect(classifyAQI(201, 'CPCB_AQI').category).toBe('UNHEALTHY');
+      expect(classifyAQI(300, 'CPCB_AQI').category).toBe('UNHEALTHY');
+      expect(classifyAQI(301, 'CPCB_AQI').category).toBe('VERY_UNHEALTHY');
+      expect(classifyAQI(400, 'CPCB_AQI').category).toBe('VERY_UNHEALTHY');
+      expect(classifyAQI(401, 'CPCB_AQI').category).toBe('HAZARDOUS');
+    });
+
+    it('handles null, NaN, Infinity, and negative AQI values gracefully as UNKNOWN', () => {
+      expect(classifyAQI(null).category).toBe('UNKNOWN');
+      expect(classifyAQI(NaN).category).toBe('UNKNOWN');
+      expect(classifyAQI(Infinity).category).toBe('UNKNOWN');
+      expect(classifyAQI(-5).category).toBe('UNKNOWN');
+      expect(classifyAQI(-1, 'CPCB_AQI').label).toBe('Data Unavailable');
     });
   });
 });

@@ -195,3 +195,29 @@ export interface SavedActionRecord {
   locationName: string;
   aqiAtSave: number | null;
 }
+
+export interface ChatMessageResponse {
+  response: string;
+  usedModel: string;
+  groundedInContext: boolean;
+}
+
+export interface ImpactCalculationResult {
+  avoidedKgCO2e: number;
+  avoidedGramsExhaustPM: number;
+  methodology: string;
+  assumptions: string;
+  uncertaintyRange: string;
+}
+
+export interface ExportSummaryReport {
+  title: string;
+  generatedAt: string;
+  statistics: {
+    totalActionsSaved: number;
+    actionsCompleted: number;
+    completionRatePercentage: number;
+  };
+  householdPreferences: HouseholdPreferences | null;
+  actionsList: SavedActionRecord[];
+}

@@ -10,7 +10,7 @@ interface PollutantCardProps {
   description: string;
 }
 
-export const PollutantCard: React.FC<PollutantCardProps> = ({
+export const PollutantCard: React.FC<PollutantCardProps> = React.memo(({
   name,
   fullName,
   value,
@@ -58,7 +58,7 @@ export const PollutantCard: React.FC<PollutantCardProps> = ({
 
   return (
     <div
-      className="bg-navy-800/80 border border-slate-700/60 rounded-xl p-4 flex flex-col justify-between hover:border-teal-500/50 transition-all shadow-md"
+      className="bg-navy-800/80 border border-slate-700/60 rounded-xl p-4 min-h-[152px] flex flex-col justify-between hover:border-teal-500/50 transition-all shadow-md"
       role="article"
       aria-label={`${fullName} reading: ${isAvailable ? `${value} ${unit}` : 'Unavailable'}`}
     >
@@ -102,5 +102,7 @@ export const PollutantCard: React.FC<PollutantCardProps> = ({
       </div>
     </div>
   );
-};
+});
+
+PollutantCard.displayName = 'PollutantCard';
 

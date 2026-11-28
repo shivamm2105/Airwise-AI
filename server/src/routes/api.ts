@@ -40,16 +40,16 @@ router.post('/recommendations/calculate-impact', apiRateLimiter, calculateImpact
 // GenAI Chat Assistant Endpoint
 router.post('/chat', aiRateLimiter, handleChatMessage);
 
-// Saved Actions & Preferences Endpoints
-router.get('/saved-actions', getSavedActions);
-router.post('/saved-actions', saveAction);
-router.delete('/saved-actions', clearAllActions);
-router.patch('/saved-actions/:id/toggle', toggleActionCompletion);
-router.delete('/saved-actions/:id', deleteAction);
-router.get('/saved-actions/export', exportSummary);
+// Saved Actions & Preferences Endpoints (protected by apiRateLimiter)
+router.get('/saved-actions', apiRateLimiter, getSavedActions);
+router.post('/saved-actions', apiRateLimiter, saveAction);
+router.delete('/saved-actions', apiRateLimiter, clearAllActions);
+router.patch('/saved-actions/:id/toggle', apiRateLimiter, toggleActionCompletion);
+router.delete('/saved-actions/:id', apiRateLimiter, deleteAction);
+router.get('/saved-actions/export', apiRateLimiter, exportSummary);
 
-router.get('/preferences', getPreferences);
-router.post('/preferences', updatePreferences);
+router.get('/preferences', apiRateLimiter, getPreferences);
+router.post('/preferences', apiRateLimiter, updatePreferences);
 
 export default router;
 

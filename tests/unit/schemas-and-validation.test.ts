@@ -3,7 +3,8 @@ import {
   LocationCoordinatesSchema,
   LocationQuerySchema,
   HouseholdPreferencesSchema,
-  ChatMessageRequestSchema
+  ChatMessageRequestSchema,
+  mergeHouseholdPreferences
 } from '../../shared/schemas.js';
 
 describe('Zod Schemas and Input Validation Unit Tests', () => {
@@ -55,6 +56,16 @@ describe('Zod Schemas and Input Validation Unit Tests', () => {
   it('rejects empty chat messages', () => {
     const req = { message: '' };
     expect(() => ChatMessageRequestSchema.parse(req)).toThrow();
+  });
+
+  it('merges partial preference updates cleanly without duplicating defaults', () => {
+    const base = HouseholdPreferencesSchema.parse({ hasChildren: true, commuteDistanceKm: 18 });
+    const merged = mergeHouseholdPreferences(base, { hasAirPurifier: true, purifierFilterType: 'HEPA' });
+
+    expect(merged.hasChildren).toBe(true);
+    expect(merged.commuteDistanceKm).toBe(18);
+    expect(merged.hasAirPurifier).toBe(true);
+    expect(merged.purifierFilterType).toBe('HEPA');
   });
 });
 

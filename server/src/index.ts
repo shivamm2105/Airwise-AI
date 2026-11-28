@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import compression from 'compression';
 import path from 'path';
 import fs from 'fs';
 import apiRouter from './routes/api.js';
@@ -7,10 +8,13 @@ import { helmetMiddleware, corsMiddleware } from './middleware/security.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 export const app = express();
+app.disable('x-powered-by');
+app.set('trust proxy', 1);
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
 
-// Core Security & Middleware
+// Core Security & Compression Middleware
+app.use(compression());
 app.use(helmetMiddleware);
 app.use(corsMiddleware);
 app.use(express.json({ limit: '200kb' }));
@@ -19,15 +23,19 @@ app.use(express.json({ limit: '200kb' }));
 app.use('/api', apiRouter);
 
 // Serve Client Static Files in Production (if built)
-const clientDistPath = path.resolve(process.cwd(), 'client/dist');
-const altDistPath = path.resolve(process.cwd(), 'dist/client');
-const staticPath = fs.existsSync(clientDistPath) ? clientDistPath : fs.existsSync(altDistPath) ? altDistPath : null;
+const distClientPath = path.resolve(process.cwd(), 'dist/client');
+const legacyDistPath = path.resolve(process.cwd(), 'client/dist');
+const staticPath = fs.existsSync(distClientPath)
+  ? distClientPath
+  : fs.existsSync(legacyDistPath)
+  ? legacyDistPath
+  : null;
 
 // Robots.txt handler to ensure valid plain-text SEO response
 app.get('/robots.txt', (_req, res) => {
   res.setHeader('Content-Type', 'text/plain');
   res.setHeader('Cache-Control', 'public, max-age=86400');
-  res.send("User-agent: *\nAllow: /\n");
+  res.send('User-agent: *\nAllow: /\nSitemap: https://airwiseaibot.vercel.app/sitemap.xml\n');
 });
 
 // Favicon handler to avoid 404/MIME-type errors
@@ -98,7 +106,7 @@ if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
     console.log(`🚀 AirWise AI Server is running on port ${PORT}`);
     console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`🌍 Air Quality Provider: ${process.env.AIR_QUALITY_PROVIDER || 'open-meteo'}`);
-    console.log(`🤖 Gemini Model: ${process.env.GEMINI_MODEL || 'gemini-2.5-flash'} (${process.env.GEMINI_API_KEY ? 'Active' : 'Deterministic Fallback Mode'})`);
+    console.log(`🤖 Gemini Model: ${process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite'} (${process.env.GEMINI_API_KEY ? 'Active' : 'Deterministic Fallback Mode'})`);
     console.log(`=======================================================`);
   });
 }

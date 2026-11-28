@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Search, MapPin, Navigation, X, Check, Loader2, AlertCircle } from 'lucide-react';
 import { LocationCoordinates } from '@shared/types';
-import { api } from '../services/api';
+import { api, isAbortError } from '../services/api';
+import { PRESET_CITIES } from '../constants/locations';
 
 interface LocationModalProps {
   isOpen: boolean;
@@ -9,17 +10,6 @@ interface LocationModalProps {
   currentLocation: LocationCoordinates | null;
   onSelectLocation: (loc: LocationCoordinates) => void;
 }
-
-const PRESET_CITIES: LocationCoordinates[] = [
-  { name: 'New Delhi', region: 'Delhi', country: 'India', latitude: 28.6139, longitude: 77.2090, timezone: 'Asia/Kolkata' },
-  { name: 'Mumbai', region: 'Maharashtra', country: 'India', latitude: 19.0760, longitude: 72.8777, timezone: 'Asia/Kolkata' },
-  { name: 'Bengaluru', region: 'Karnataka', country: 'India', latitude: 12.9716, longitude: 77.5946, timezone: 'Asia/Kolkata' },
-  { name: 'London', region: 'Greater London', country: 'United Kingdom', latitude: 51.5074, longitude: -0.1278, timezone: 'Europe/London' },
-  { name: 'New York', region: 'New York', country: 'United States', latitude: 40.7128, longitude: -74.0060, timezone: 'America/New_York' },
-  { name: 'Beijing', region: 'Beijing', country: 'China', latitude: 39.9042, longitude: 116.4074, timezone: 'Asia/Shanghai' },
-  { name: 'Tokyo', region: 'Tokyo', country: 'Japan', latitude: 35.6762, longitude: 139.6503, timezone: 'Asia/Tokyo' },
-  { name: 'Los Angeles', region: 'California', country: 'United States', latitude: 34.0522, longitude: -118.2437, timezone: 'America/Los_Angeles' }
-];
 
 export const LocationModal: React.FC<LocationModalProps> = ({
   isOpen,
@@ -32,37 +22,54 @@ export const LocationModal: React.FC<LocationModalProps> = ({
   const [searching, setSearching] = useState(false);
   const [geolocating, setGeolocating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchAbortRef = useRef<AbortController | null>(null);
 
-  // WCAG 2.2 AA: Close modal on Escape key press
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      searchAbortRef.current?.abort();
+      return;
+    }
+
+    searchInputRef.current?.focus();
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      searchAbortRef.current?.abort();
+    };
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!query.trim() || query.length < 2) return;
+    const trimmed = query.trim();
+    if (!trimmed || trimmed.length < 2) return;
+
+    searchAbortRef.current?.abort();
+    const controller = new AbortController();
+    searchAbortRef.current = controller;
 
     setSearching(true);
     setErrorMessage(null);
     try {
-      const items = await api.searchLocations(query.trim());
+      const items = await api.searchLocations(trimmed, controller.signal);
       setResults(items);
       if (items.length === 0) {
-        setErrorMessage(`No matching environmental stations found for "${query}". Try searching by major city name.`);
+        setErrorMessage(`No matching environmental stations found for "${trimmed}". Try searching by major city name.`);
       }
-    } catch {
+    } catch (err) {
+      if (isAbortError(err)) return;
       setErrorMessage('Search request timed out. Please select from preset cities below.');
     } finally {
-      setSearching(false);
+      if (!controller.signal.aborted) {
+        setSearching(false);
+      }
     }
   };
 
@@ -76,7 +83,7 @@ export const LocationModal: React.FC<LocationModalProps> = ({
     setErrorMessage(null);
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
+      pos => {
         setGeolocating(false);
         const userLoc: LocationCoordinates = {
           name: 'Your Current Location',
@@ -86,7 +93,7 @@ export const LocationModal: React.FC<LocationModalProps> = ({
         onSelectLocation(userLoc);
         onClose();
       },
-      (err) => {
+      err => {
         setGeolocating(false);
         let msg = 'Unable to retrieve location.';
         if (err.code === err.PERMISSION_DENIED) {
@@ -101,96 +108,119 @@ export const LocationModal: React.FC<LocationModalProps> = ({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/80 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="location-modal-title"
-    >
-      <div className="bg-navy-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Modal Header */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <button
+        type="button"
+        aria-label="Dismiss Location Dialog"
+        tabIndex={-1}
+        onClick={onClose}
+        className="fixed inset-0 bg-navy-950/80 backdrop-blur-sm cursor-default border-0"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="location-modal-title"
+        className="relative z-10 bg-navy-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+      >
         <div className="p-5 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-lg bg-teal-500/15 text-teal-400">
-              <MapPin className="w-5 h-5" />
+              <MapPin className="w-5 h-5" aria-hidden="true" />
             </div>
             <div>
               <h2 id="location-modal-title" className="text-lg font-bold text-white">
                 Select Your Location
               </h2>
               <p className="text-xs text-slate-400">
-                Choose a city to pull live atmospheric data & safety rules
+                Choose a city to pull live atmospheric data &amp; safety rules
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 focus:outline-none"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
             aria-label="Close Location Dialog"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
 
-        {/* Search & Actions */}
         <div className="p-5 border-b border-slate-800 space-y-3">
           <form onSubmit={handleSearch} className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" aria-hidden="true" />
             <input
+              ref={searchInputRef}
               type="text"
               aria-label="Search city or monitoring station worldwide"
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search any city worldwide (e.g. Delhi, London, Seattle)..."
-              className="w-full pl-10 pr-24 py-2.5 rounded-xl bg-navy-800 border border-slate-700 text-sm text-white placeholder-slate-400 focus:border-teal-500 focus:outline-none"
+              className="w-full pl-10 pr-24 py-2.5 rounded-xl bg-navy-800 border border-slate-700 text-sm text-white placeholder-slate-400 focus:border-teal-500"
             />
             <button
               type="submit"
-              disabled={searching || !query.trim()}
-              className="absolute right-1.5 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold disabled:opacity-50 transition-colors flex items-center gap-1.5"
+              disabled={searching || query.trim().length < 2}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-600 text-white text-xs font-semibold disabled:opacity-50 transition-colors flex items-center gap-1.5"
             >
-              {searching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Search'}
+              {searching ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : 'Search'}
             </button>
           </form>
 
-          {/* Browser Geolocation Button */}
           <button
+            type="button"
             onClick={handleBrowserGeolocation}
             disabled={geolocating}
             className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-navy-800/80 hover:bg-navy-800 border border-slate-700/80 text-xs font-semibold text-teal-300 hover:text-teal-200 transition-colors"
           >
             {geolocating ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
+                <Loader2 className="w-4 h-4 animate-spin text-teal-400" aria-hidden="true" />
                 <span>Locating with browser GPS...</span>
               </>
             ) : (
               <>
-                <Navigation className="w-4 h-4 text-teal-400" />
+                <Navigation className="w-4 h-4 text-teal-400" aria-hidden="true" />
                 <span>Use My Current Device Location (Explicit Permission)</span>
               </>
             )}
           </button>
 
           {errorMessage && (
-            <div className="p-3 rounded-lg bg-rose-950/60 border border-rose-800/60 text-xs text-rose-300 flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+            <div
+              role="alert"
+              className="p-3 rounded-lg bg-rose-950/60 border border-rose-800/60 text-xs text-rose-300 flex items-start gap-2"
+            >
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" aria-hidden="true" />
               <span>{errorMessage}</span>
             </div>
           )}
         </div>
 
-        {/* Results or Presets List */}
         <div className="p-5 overflow-y-auto space-y-4 flex-1">
           {results.length > 0 ? (
             <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-teal-400 mb-2 block">
-                Search Results ({results.length})
-              </span>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-teal-400">
+                  Search Results ({results.length})
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResults([]);
+                    setQuery('');
+                    setErrorMessage(null);
+                  }}
+                  className="text-xs text-slate-400 hover:text-white"
+                >
+                  Clear Search
+                </button>
+              </div>
               <div className="space-y-1.5">
-                {results.map((loc, i) => (
+                {results.map(loc => (
                   <button
-                    key={i}
+                    type="button"
+                    key={`${loc.name}-${loc.latitude}-${loc.longitude}`}
                     onClick={() => {
                       onSelectLocation(loc);
                       onClose();
@@ -213,29 +243,29 @@ export const LocationModal: React.FC<LocationModalProps> = ({
           ) : (
             <div>
               <span className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 block">
-                Featured Urban Centers (Severe Smog & Clean Air Reference Hubs)
+                Featured Urban Centers (Severe Smog &amp; Clean Air Reference Hubs)
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {PRESET_CITIES.map((city, idx) => {
+                {PRESET_CITIES.map(city => {
                   const isSelected = currentLocation?.name === city.name;
                   return (
                     <button
-                      key={idx}
+                      type="button"
+                      key={city.name}
                       onClick={() => {
                         onSelectLocation(city);
                         onClose();
                       }}
-                      className={`text-left p-2.5 rounded-xl border flex items-center justify-between transition-all ${
-                        isSelected
-                          ? 'bg-teal-950/60 border-teal-500/60 text-teal-300'
-                          : 'bg-navy-800/70 border-slate-700 hover:border-slate-600 text-slate-200'
-                      }`}
+                      className={`text-left p-2.5 rounded-xl border flex items-center justify-between transition-all ${isSelected
+                        ? 'bg-teal-950/60 border-teal-500/60 text-teal-300'
+                        : 'bg-navy-800/70 border-slate-700 hover:border-slate-600 text-slate-200'
+                        }`}
                     >
                       <div>
                         <span className="font-semibold text-xs text-white block">{city.name}</span>
                         <span className="text-[11px] text-slate-400">{city.country}</span>
                       </div>
-                      {isSelected && <Check className="w-4 h-4 text-teal-400" />}
+                      {isSelected && <Check className="w-4 h-4 text-teal-400" aria-hidden="true" />}
                     </button>
                   );
                 })}
@@ -247,4 +277,3 @@ export const LocationModal: React.FC<LocationModalProps> = ({
     </div>
   );
 };
-

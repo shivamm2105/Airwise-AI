@@ -8,10 +8,100 @@ import {
   AQICategory,
   AQIStandard,
   HouseholdPreferences,
+  LocationCoordinates,
   PollutantMeasurements,
   RespiratorRecommendation,
   SafetyEvaluation
 } from './types.js';
+
+interface BreakpointSegment {
+  cLow: number;
+  cHigh: number;
+  iLow: number;
+  iHigh: number;
+}
+
+const US_EPA_PM25_BREAKPOINTS: readonly BreakpointSegment[] = [
+  { cLow: 0, cHigh: 9.0, iLow: 0, iHigh: 50 },
+  { cLow: 9.1, cHigh: 35.4, iLow: 51, iHigh: 100 },
+  { cLow: 35.5, cHigh: 55.4, iLow: 101, iHigh: 150 },
+  { cLow: 55.5, cHigh: 125.4, iLow: 151, iHigh: 200 },
+  { cLow: 125.5, cHigh: 225.4, iLow: 201, iHigh: 300 },
+  { cLow: 225.5, cHigh: 500.4, iLow: 301, iHigh: 500 }
+];
+
+const CPCB_PM25_BREAKPOINTS: readonly BreakpointSegment[] = [
+  { cLow: 0, cHigh: 30, iLow: 0, iHigh: 50 },
+  { cLow: 30, cHigh: 60, iLow: 51, iHigh: 100 },
+  { cLow: 60, cHigh: 90, iLow: 101, iHigh: 200 },
+  { cLow: 90, cHigh: 120, iLow: 201, iHigh: 300 },
+  { cLow: 120, cHigh: 250, iLow: 301, iHigh: 400 },
+  { cLow: 250, cHigh: 400, iLow: 401, iHigh: 500 }
+];
+
+const CPCB_PM10_BREAKPOINTS: readonly BreakpointSegment[] = [
+  { cLow: 0, cHigh: 50, iLow: 0, iHigh: 50 },
+  { cLow: 50, cHigh: 100, iLow: 51, iHigh: 100 },
+  { cLow: 100, cHigh: 250, iLow: 101, iHigh: 200 },
+  { cLow: 250, cHigh: 350, iLow: 201, iHigh: 300 },
+  { cLow: 350, cHigh: 430, iLow: 301, iHigh: 400 },
+  { cLow: 430, cHigh: 500, iLow: 401, iHigh: 500 }
+];
+
+function interpolateSubIndex(concentration: number, segments: readonly BreakpointSegment[]): number {
+  const clamped = Math.max(0, concentration);
+  for (const seg of segments) {
+    if (clamped <= seg.cHigh) {
+      if (seg.cHigh === seg.cLow) return seg.iLow;
+      const ratio = (clamped - seg.cLow) / (seg.cHigh - seg.cLow);
+      return Math.round(seg.iLow + ratio * (seg.iHigh - seg.iLow));
+    }
+  }
+  return 500;
+}
+
+/**
+ * Calculates Indian CPCB NAQI sub-index for PM2.5 (µg/m³)
+ */
+export function calculateCPCBSubIndexPM25(pm25: number): number {
+  return interpolateSubIndex(pm25, CPCB_PM25_BREAKPOINTS);
+}
+
+/**
+ * Calculates Indian CPCB NAQI sub-index for PM10 (µg/m³)
+ */
+export function calculateCPCBSubIndexPM10(pm10: number): number {
+  return interpolateSubIndex(pm10, CPCB_PM10_BREAKPOINTS);
+}
+
+/**
+ * Calculates US EPA AQI sub-index for PM2.5 (µg/m³) using official 2024 breakpoints
+ */
+export function calculateUSEPASubIndexPM25(pm25: number): number {
+  const truncated = Math.floor(Math.max(0, pm25) * 10) / 10;
+  return interpolateSubIndex(truncated, US_EPA_PM25_BREAKPOINTS);
+}
+
+const INDIAN_CITY_HINTS = ['delhi', 'mumbai', 'bengaluru', 'bangalore', 'kolkata', 'chennai', 'hyderabad', 'pune', 'ahmedabad', 'jaipur', 'lucknow'];
+
+/**
+ * Single authoritative detector determining whether coordinates/location apply CPCB NAQI standards.
+ */
+export function isIndiaLocation(
+  coords: Pick<LocationCoordinates, 'name' | 'country' | 'latitude' | 'longitude'>
+): boolean {
+  const countryLower = coords.country?.trim().toLowerCase();
+  if (countryLower === 'india' || countryLower === 'in') {
+    return true;
+  }
+
+  const nameLower = (coords.name || '').toLowerCase();
+  if (INDIAN_CITY_HINTS.some(hint => nameLower.includes(hint))) {
+    return true;
+  }
+
+  return coords.latitude >= 8.0 && coords.latitude <= 37.0 && coords.longitude >= 68.0 && coords.longitude <= 97.5;
+}
 
 /**
  * Standard classification tables
@@ -37,7 +127,7 @@ export function classifyAQI(aqi: number | null, standard: AQIStandard = 'US_AQI'
   label: string;
   healthImplications: string;
 } {
-  if (aqi === null || aqi === undefined || isNaN(aqi)) {
+  if (aqi === null || aqi === undefined || isNaN(aqi) || !isFinite(aqi) || aqi < 0) {
     return {
       category: 'UNKNOWN',
       label: 'Data Unavailable',

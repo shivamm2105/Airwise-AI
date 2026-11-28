@@ -10,7 +10,7 @@ interface AQIBadgeProps {
   size?: 'sm' | 'md' | 'lg';
 }
 
-export const AQIBadge: React.FC<AQIBadgeProps> = ({
+export const AQIBadge: React.FC<AQIBadgeProps> = React.memo(({
   aqi,
   category,
   categoryLabel,
@@ -77,7 +77,7 @@ export const AQIBadge: React.FC<AQIBadgeProps> = ({
   if (size === 'lg') {
     return (
       <div
-        className={`flex flex-col md:flex-row items-center gap-6 p-6 rounded-2xl border ${config.bg} shadow-xl backdrop-blur-md`}
+        className={`flex flex-col md:flex-row items-center gap-6 p-6 rounded-2xl border ${config.bg} shadow-xl backdrop-blur-md min-h-[348px] md:min-h-[208px]`}
         role="region"
         aria-label={`Air Quality Index: ${aqi ?? 'Unavailable'}, ${categoryLabel}`}
       >
@@ -126,5 +126,7 @@ export const AQIBadge: React.FC<AQIBadgeProps> = ({
       <span>{aqi !== null ? `${aqi} • ${categoryLabel}` : 'Data Unavailable'}</span>
     </div>
   );
-};
+});
+
+AQIBadge.displayName = 'AQIBadge';
 

@@ -4,9 +4,12 @@ import { LocationQuerySchema, SearchQuerySchema } from '../../../shared/schemas.
 
 export async function getCurrentAirQuality(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    const rawLat = req.query.latitude ?? req.query.lat;
+    const rawLon = req.query.longitude ?? req.query.lon;
+
     const parsedQuery = LocationQuerySchema.parse({
-      latitude: req.query.latitude ? Number(req.query.latitude) : req.query.lat ? Number(req.query.lat) : undefined,
-      longitude: req.query.longitude ? Number(req.query.longitude) : req.query.lon ? Number(req.query.lon) : undefined,
+      latitude: typeof rawLat === 'string' && rawLat.trim() !== '' ? rawLat : undefined,
+      longitude: typeof rawLon === 'string' && rawLon.trim() !== '' ? rawLon : undefined,
       city: typeof req.query.city === 'string' ? req.query.city : undefined
     });
 
@@ -15,8 +18,8 @@ export async function getCurrentAirQuality(req: Request, res: Response, next: Ne
     let locationName = parsedQuery.city || 'Custom Location';
     let country: string | undefined;
     let region: string | undefined;
+    let timezone: string | undefined;
 
-    // If city name is provided instead of coordinates, geocode first
     if (lat === undefined || lon === undefined) {
       const searchResults = await airQualityService.searchLocations(parsedQuery.city!);
       if (!searchResults.length) {
@@ -32,6 +35,7 @@ export async function getCurrentAirQuality(req: Request, res: Response, next: Ne
       locationName = searchResults[0].name;
       country = searchResults[0].country;
       region = searchResults[0].region;
+      timezone = searchResults[0].timezone;
     }
 
     const data = await airQualityService.getAirQualityByCoordinates({
@@ -39,7 +43,8 @@ export async function getCurrentAirQuality(req: Request, res: Response, next: Ne
       longitude: lon,
       name: locationName,
       country,
-      region
+      region,
+      timezone
     });
 
     res.json(data);
@@ -57,4 +62,3 @@ export async function searchLocations(req: Request, res: Response, next: NextFun
     next(err);
   }
 }
-

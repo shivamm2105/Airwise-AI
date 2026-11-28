@@ -1,4 +1,6 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import fs from 'fs';
+import path from 'path';
 import request from 'supertest';
 import { app } from '../../server/src/index.js';
 import { ProviderFactory } from '../../server/src/providers/ProviderFactory.js';
@@ -7,12 +9,25 @@ import { airQualityService } from '../../server/src/services/AirQualityService.j
 import { storageService } from '../../server/src/services/StorageService.js';
 
 describe('End-to-End User Journey Workflow Test', () => {
+  const originalGeminiKey = process.env.GEMINI_API_KEY;
+
   beforeAll(() => {
     process.env.NODE_ENV = 'test';
+    delete process.env.GEMINI_API_KEY;
     const demo = new DemoAirQualityProvider();
     ProviderFactory.getProvider = () => demo;
     airQualityService.setProvider(demo);
     storageService.clearAllActions();
+  });
+
+  afterAll(() => {
+    if (originalGeminiKey !== undefined) {
+      process.env.GEMINI_API_KEY = originalGeminiKey;
+    }
+    const testStore = path.resolve(process.cwd(), `server/data/airwise-test-store-${process.pid}.json`);
+    if (fs.existsSync(testStore)) {
+      fs.unlinkSync(testStore);
+    }
   });
 
   it('executes full primary user journey: location -> environmental readings -> plan -> save -> complete -> export', async () => {

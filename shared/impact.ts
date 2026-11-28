@@ -6,7 +6,7 @@
 
 import { ImpactAssessment } from './types.js';
 
-export interface TransportEmissionCalculationParams {
+interface TransportEmissionCalculationParams {
   distanceKm: number;
   originalMode: 'car_alone';
   alternativeMode: 'public_transit' | 'carpool' | 'bicycle' | 'walk' | 'work_from_home';

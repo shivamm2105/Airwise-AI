@@ -5,16 +5,13 @@ import {
   LocationCoordinates,
   PollutantMeasurements
 } from '../../../shared/types.js';
-import { classifyAQI } from '../../../shared/safetyRules.js';
+import { classifyAQI, isIndiaLocation } from '../../../shared/safetyRules.js';
 
 export class DemoAirQualityProvider implements AirQualityProvider {
   public readonly name = 'AirWise Simulated Environmental Test Provider (Demo Mode)';
 
   public async getAirQuality(coords: LocationCoordinates): Promise<AirQualityData> {
-    const isIndia =
-      coords.country?.toLowerCase() === 'india' ||
-      coords.name.toLowerCase().includes('delhi') ||
-      (coords.latitude >= 8.0 && coords.latitude <= 37.0 && coords.longitude >= 68.0 && coords.longitude <= 97.5);
+    const isIndia = isIndiaLocation(coords);
 
     // Provide realistic severe winter smog values for Delhi demo, or moderate values for other cities
     let aqi = 245; // Default Unhealthy

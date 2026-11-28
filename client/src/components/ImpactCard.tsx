@@ -7,7 +7,7 @@ interface ImpactCardProps {
   compact?: boolean;
 }
 
-export const ImpactCard: React.FC<ImpactCardProps> = ({ impact, compact = false }) => {
+export const ImpactCard: React.FC<ImpactCardProps> = React.memo(({ impact, compact = false }) => {
   const { personalExposureBenefit, environmentalEmissionBenefit } = impact;
 
   return (
@@ -96,5 +96,7 @@ export const ImpactCard: React.FC<ImpactCardProps> = ({ impact, compact = false 
       </div>
     </div>
   );
-};
+});
+
+ImpactCard.displayName = 'ImpactCard';
 

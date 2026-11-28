@@ -38,7 +38,7 @@ export const ImpactExplainerPage: React.FC = () => {
       <div className="bg-navy-800/90 border border-slate-700/80 rounded-2xl p-5 shadow-md">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-xl bg-teal-500/15 text-teal-400">
-            <Scale className="w-5 h-5" />
+            <Scale className="w-5 h-5" aria-hidden="true" />
           </div>
           <div>
             <h1 className="text-xl font-bold text-white flex items-center gap-2">
@@ -52,7 +52,7 @@ export const ImpactExplainerPage: React.FC = () => {
 
         {/* Methodology & Ethics Disclaimer */}
         <div className="mt-4 p-3.5 rounded-xl bg-navy-900 border border-slate-700/80 text-xs text-slate-300 flex items-start gap-2.5">
-          <Info className="w-4 h-4 text-teal-400 shrink-0 mt-0.5" />
+          <Info className="w-4 h-4 text-teal-400 shrink-0 mt-0.5" aria-hidden="true" />
           <div className="space-y-1">
             <strong className="text-white">Scientific Distinction Principle:</strong>
             <p className="text-slate-400 leading-relaxed text-[11px]">
@@ -76,6 +76,7 @@ export const ImpactExplainerPage: React.FC = () => {
             const isSelected = selectedCase === c.id;
             return (
               <button
+                type="button"
                 key={c.id}
                 onClick={() => setSelectedCase(c.id)}
                 className={`p-3 rounded-xl border text-left transition-all ${
@@ -129,7 +130,7 @@ export const ImpactExplainerPage: React.FC = () => {
         <div className="p-5 rounded-2xl bg-gradient-to-br from-navy-800 to-navy-900 border border-sky-500/30 space-y-3">
           <div className="flex items-center gap-2">
             <div className="p-2 rounded-lg bg-sky-950 text-sky-400 border border-sky-500/30">
-              <Shield className="w-4 h-4" />
+              <Shield className="w-4 h-4" aria-hidden="true" />
             </div>
             <h3 className="text-base font-bold text-white">Category A: Personal Exposure Benefit</h3>
           </div>
@@ -146,7 +147,7 @@ export const ImpactExplainerPage: React.FC = () => {
         <div className="p-5 rounded-2xl bg-gradient-to-br from-navy-800 to-navy-900 border border-emerald-500/30 space-y-3">
           <div className="flex items-center gap-2">
             <div className="p-2 rounded-lg bg-emerald-950 text-emerald-400 border border-emerald-500/30">
-              <Leaf className="w-4 h-4" />
+              <Leaf className="w-4 h-4" aria-hidden="true" />
             </div>
             <h3 className="text-base font-bold text-white">Category B: Environmental Emission Benefit</h3>
           </div>

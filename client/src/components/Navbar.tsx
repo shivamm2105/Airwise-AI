@@ -63,8 +63,9 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="flex items-center justify-between h-16">
           {/* Brand Logo */}
           <button
+            type="button"
             onClick={() => handleNavClick('landing')}
-            className="flex items-center gap-2.5 text-left group focus:outline-none"
+            className="flex items-center gap-2.5 text-left group rounded-lg"
           >
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-teal-500 to-emerald-400 flex items-center justify-center text-navy-900 shadow-md group-hover:scale-105 transition-transform">
               <Wind className="w-5 h-5" aria-hidden="true" />
@@ -84,6 +85,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               const isActive = currentTab === item.id;
               return (
                 <button
+                  type="button"
                   key={item.id}
                   onClick={() => handleNavClick(item.id)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
@@ -103,6 +105,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Location Quick-Pill & Mobile Toggle */}
           <div className="flex items-center gap-2.5">
             <button
+              type="button"
               onClick={onOpenLocationModal}
               className="flex items-center gap-1.5 px-3 py-2 min-h-[44px] rounded-lg bg-navy-800 border border-slate-700/80 text-xs font-medium text-slate-200 hover:border-teal-500/60 hover:text-teal-300 transition-all shadow-sm"
               aria-label={`Current location: ${currentLocation ? currentLocation.name : 'Select location'}. Click to change.`}
@@ -115,12 +118,13 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* Mobile Hamburger Toggle */}
             <button
+              type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg bg-navy-800 border border-slate-700 text-slate-300 hover:text-white focus:outline-none"
+              className="lg:hidden p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg bg-navy-800 border border-slate-700 text-slate-300 hover:text-white"
               aria-expanded={mobileMenuOpen}
               aria-label={mobileMenuOpen ? 'Close Navigation Menu' : 'Open Navigation Menu'}
             >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {mobileMenuOpen ? <X className="w-5 h-5" aria-hidden="true" /> : <Menu className="w-5 h-5" aria-hidden="true" />}
             </button>
           </div>
         </div>
@@ -130,18 +134,20 @@ export const Navbar: React.FC<NavbarProps> = ({
       {mobileMenuOpen && (
         <div className="lg:hidden bg-navy-900 border-b border-slate-800 px-4 pt-2 pb-4 space-y-1 shadow-2xl">
           <button
+            type="button"
             onClick={() => handleNavClick('landing')}
             className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-semibold ${
               currentTab === 'landing' ? 'bg-teal-500/20 text-teal-400' : 'text-slate-300 hover:bg-slate-800'
             }`}
           >
-            <span>Overview & Mission</span>
+            <span>Overview &amp; Mission</span>
           </button>
           {navItems.map(item => {
             const Icon = item.icon;
             const isActive = currentTab === item.id;
             return (
               <button
+                type="button"
                 key={item.id}
                 onClick={() => handleNavClick(item.id)}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-semibold ${

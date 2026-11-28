@@ -5,10 +5,10 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![TypeScript: Strict](https://img.shields.io/badge/TypeScript-Strict%20Mode-blue.svg)](tsconfig.json)
-[![Tests: 62 Passed](https://img.shields.io/badge/Tests-62%2F62%20Passing-emerald.svg)](tests/)
-[![Lighthouse: 100/100](https://img.shields.io/badge/Lighthouse-100%2F100%20All%20Criteria-brightgreen.svg)](docs/FINAL_COMPETITION_SCORECARD.md)
+[![Tests: 97 Passed](https://img.shields.io/badge/Tests-97%2F97%20Passing-emerald.svg)](tests/)
+[![Lighthouse: 100/100](https://img.shields.io/badge/Lighthouse-100%2F100%20Desktop%20%26%20Mobile-brightgreen.svg)](docs/FINAL_LIGHTHOUSE_REPORT.md)
 [![WCAG: 2.2 AA](https://img.shields.io/badge/Accessibility-WCAG%202.2%20AA-teal.svg)](docs/ACCESSIBILITY_AUDIT.md)
-[![Repo Size: < 0.6 MB](https://img.shields.io/badge/Repo%20Size-0.56%20MB%20%28%3C8MB%20target%29-brightgreen.svg)](scripts/size-audit.js)
+[![Repo Size: < 0.85 MB](https://img.shields.io/badge/Repo%20Size-%3C0.85%20MB%20%28%3C8MB%20target%29-brightgreen.svg)](scripts/size-audit.js)
 
 ---
 
@@ -100,15 +100,15 @@ airwise-ai/
 │   ├── integration/            # Supertest Express API endpoint integration tests
 │   ├── component/              # React Testing Library component tests
 │   └── e2e/                    # Complete end-to-end user journey test
-├── docs/                       # Comprehensive Architecture & Competition Audits
-│   ├── FINAL_COMPETITION_SCORECARD.md # Autonomous multi-role audit & 100-point rubric
-│   ├── SUBMISSION_CHECKLIST.md # 8-step evaluator demonstration walkthrough
-│   ├── ARCHITECTURE.md         # Detailed technical design & component architecture
-│   ├── SECURITY_AUDIT.md       # Threat modeling, secrets, and defense-in-depth report
-│   ├── TESTING.md              # Automated test suite evidence and edge-case audit
-│   ├── ACCESSIBILITY_AUDIT.md  # WCAG 2.2 AA audit and contrast analysis
-│   ├── PROBLEM_ALIGNMENT.md    # 10-point traceability matrix
-│   └── EVALUATION_AUDIT.md     # Independent six-criteria competition assessment
+├── docs/                       # Final Release Audits & Competition Reports
+│   ├── FINAL_COMPETITION_SCORECARD.md  # Official baseline vs post-release evaluation
+│   ├── FINAL_RELEASE_AUDIT.md          # Complete forensic optimization & cleanup log
+│   ├── FINAL_LIGHTHOUSE_REPORT.md      # Mobile & Desktop Lighthouse audit records
+│   ├── FINAL_FUNCTIONAL_TEST_REPORT.md # Vitest, V8 coverage & Chrome/Edge E2E QA
+│   ├── FINAL_SECURITY_REPORT.md        # Threat model, CORS/CSP, audit & history scan
+│   ├── SUBMISSION_CHECKLIST.md         # 8-step evaluator demonstration walkthrough
+│   ├── ARCHITECTURE.md                 # System design & component architecture
+│   └── PROBLEM_ALIGNMENT.md            # Challenge 6 traceability matrix
 ├── scripts/
 │   └── size-audit.js           # Automated repository size & secret scanning script
 ├── .env.example                # Environment variables template
@@ -147,7 +147,7 @@ AIR_QUALITY_PROVIDER=open-meteo
 # If left blank, AirWise AI automatically operates in deterministic
 # evidence-aware rule engine mode without failing.
 GEMINI_API_KEY=
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.5-flash-lite
 ```
 
 ---
@@ -160,43 +160,33 @@ GEMINI_MODEL=gemini-2.5-flash
 | **Server Dev** | `npm run dev:server` | Starts backend in watch mode via `tsx`. |
 | **Client Dev** | `npm run dev:client` | Starts Vite development server with API proxying. |
 | **Typecheck** | `npm run typecheck` | Strictly typechecks root, shared, server, and client code. |
-| **Automated Tests** | `npm test` | Runs the complete 62-test suite across Unit, API, Component, and E2E suites. |
-| **Production Build**| `npm run build` | Compiles optimized client bundle (`dist/client`) and server (`dist/server`). |
-| **Start Production**| `npm start` | Launches compiled production Express server hosting static client files. |
-| **Size Audit** | `npm run size-audit` | Audits repository size and confirms zero tracked secrets. |
+| **Linting** | `npm run lint` | Runs ESLint 9 across TypeScript, React Hooks, and JSX-A11y rules. |
+| **Automated Tests** | `npm test` | Runs the complete 97-test suite across Unit, API, Component/WCAG, and E2E suites. |
+| **Coverage Report** | `npm run test:coverage` | Runs all 12 Vitest suites with V8 AST statement/branch/line coverage. |
+| **Production Build**| `npm run build` | Compiles code-split client (`dist/client`) and server (`dist/server`). |
+| **Start Production**| `npm start` | Launches compiled gzip-compressed Express server hosting static client files. |
+| **Size Audit** | `npm run size-audit` | Audits repository size and scans file contents for secret patterns. |
 
 ---
 
 ## 6. Verified Automated Test Results
 
-The test suite was executed and passed with **100% success** (62 tests passing across 9 suites):
+The test suite was executed and passed with **100% success** (**97 tests passing across 12 suites**, **0 failures**, **0 skipped**, plus live Google Chrome & Microsoft Edge E2E verification across 8 responsive viewports):
 
-```text
- ✓ tests/unit/safety-rules.test.ts (6 tests)
- ✓ tests/unit/aqi-classification.test.ts (14 tests)
- ✓ tests/unit/schemas-and-validation.test.ts (7 tests)
- ✓ tests/unit/services-and-resilience.test.ts (6 tests)
- ✓ tests/unit/environmental-data-integrity.test.ts (5 tests)
- ✓ tests/unit/impact-engine.test.ts (5 tests)
- ✓ tests/component/ui-components.test.tsx (6 tests)
- ✓ tests/integration/api-endpoints.test.ts (12 tests)
- ✓ tests/e2e/workflow.test.ts (1 test)
-
- Test Files  9 passed (9)
-      Tests  62 passed (62)
-   Duration  5.76s
-```
+- `tests/unit/` (8 suites, 61 tests): AQI breakpoints, safety rules, dual impact math, Zod v4 schemas, Open-Meteo UTC/clamping/cache, Gemini resilience & injection defense, atomic storage, client API wrapper.
+- `tests/integration/api-endpoints.test.ts` (19 tests): Express API contracts, CORS origin enforcement, rate limiting, parameter validation, error sanitization.
+- `tests/component/` (2 suites, 16 tests): Component rendering, keyboard/modal flows, automated `axe-core` WCAG checks across rendered views.
+- `tests/e2e/workflow.test.ts` (1 test): Full multi-step API journey.
 
 ---
 
 ## 7. Security, Privacy & Compliance Highlights
 
-- **Server-Side API Keys**: API credentials never leak to the client bundle.
-- **Strict Validation**: All routes guarded by Zod schemas; malformed payloads rejected with HTTP 400.
-- **Rate Limiting**: Sliding window limits (120 req/15 min general, 40 req/15 min chat) protect against DoS.
-- **Zero Sensitive Data Collection**: No medical records or identifiable clinical data collected.
-- **Repository Size Under 0.5 MB**: Total repository size is **0.486 MB**, well under the competition's 8 MB safety threshold.
-- **Accessibility**: WCAG 2.2 Level AA compliant with visible focus rings, non-color-only AQI indicators, high-contrast dark theme, and reduced motion support.
+- **Server-Side API Keys**: API credentials never leak to the client bundle (`0` matches in built JS).
+- **Zero Known Vulnerabilities**: Both `npm audit` and `npm audit --omit=dev` report `found 0 vulnerabilities`.
+- **Strict Validation & Headers**: Route payloads validated via Zod v4; production CORS explicitly scoped (no wildcard `*.vercel.app`); Express Helmet + `vercel.json` edge CSP headers active.
+- **Repository Under 1 MB**: Source footprint `< 0.85 MB`, well below the 8 MB safety target and 10 MB competition ceiling.
+- **Accessibility**: WCAG 2.2 Level AA verified via ESLint `jsx-a11y`, `axe-core`, and `100/100` Lighthouse Accessibility on Mobile & Desktop.
 
 ---
 

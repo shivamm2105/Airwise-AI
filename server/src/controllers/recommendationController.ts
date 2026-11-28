@@ -1,29 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
 import { geminiService } from '../services/GeminiService.js';
 import { airQualityService } from '../services/AirQualityService.js';
-import { HouseholdPreferencesSchema } from '../../../shared/schemas.js';
+import { DailyPlanRequestSchema, ImpactCalcRequestSchema } from '../../../shared/schemas.js';
 import { calculateAvoidedTransportEmissions } from '../../../shared/impact.js';
-import { z } from 'zod';
-
-const PlanRequestSchema = z.object({
-  latitude: z.number().min(-90).max(90),
-  longitude: z.number().min(-180).max(180),
-  locationName: z.string().default('Current Location'),
-  country: z.string().nullable().optional(),
-  region: z.string().nullable().optional(),
-  preferences: HouseholdPreferencesSchema.partial().optional()
-});
 
 export async function getDailyPlan(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const payload = PlanRequestSchema.parse(req.body);
+    const payload = DailyPlanRequestSchema.parse(req.body);
 
     const airQuality = await airQualityService.getAirQualityByCoordinates({
       latitude: payload.latitude,
       longitude: payload.longitude,
       name: payload.locationName,
-      country: payload.country || undefined,
-      region: payload.region || undefined
+      country: payload.country,
+      region: payload.region
     });
 
     const plan = await geminiService.generateDailyPlan(airQuality, payload.preferences);
@@ -32,12 +22,6 @@ export async function getDailyPlan(req: Request, res: Response, next: NextFuncti
     next(err);
   }
 }
-
-const ImpactCalcRequestSchema = z.object({
-  distanceKm: z.number().min(0.5).max(300),
-  originalMode: z.literal('car_alone'),
-  alternativeMode: z.enum(['public_transit', 'carpool', 'bicycle', 'walk', 'work_from_home'])
-});
 
 export function calculateImpact(req: Request, res: Response, next: NextFunction): void {
   try {
@@ -48,4 +32,3 @@ export function calculateImpact(req: Request, res: Response, next: NextFunction)
     next(err);
   }
 }
-

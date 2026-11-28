@@ -1,7 +1,7 @@
 import React from 'react';
 import { Wind, Shield, Database, Lock, AlertCircle, HeartHandshake } from 'lucide-react';
 
-export const Footer: React.FC = () => {
+export const Footer: React.FC = React.memo(() => {
   return (
     <footer className="bg-navy-950 border-t border-slate-800/80 text-slate-400 text-xs py-12 px-4 sm:px-6 lg:px-8 mt-16">
       <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
@@ -9,7 +9,7 @@ export const Footer: React.FC = () => {
         <div className="md:col-span-1">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-7 h-7 rounded-lg bg-teal-500/20 text-teal-400 flex items-center justify-center">
-              <Wind className="w-4 h-4" />
+              <Wind className="w-4 h-4" aria-hidden="true" />
             </div>
             <span className="font-bold text-white text-sm tracking-tight">AirWise AI</span>
           </div>
@@ -22,7 +22,7 @@ export const Footer: React.FC = () => {
         {/* Col 2: Data Sources & Integrity */}
         <div>
           <div className="flex items-center gap-1.5 text-white font-bold mb-3 text-xs uppercase tracking-wider">
-            <Database className="w-3.5 h-3.5 text-teal-400" />
+            <Database className="w-3.5 h-3.5 text-teal-400" aria-hidden="true" />
             <span>Environmental Integrity</span>
           </div>
           <ul className="space-y-1.5 text-[11px] text-slate-400">
@@ -36,7 +36,7 @@ export const Footer: React.FC = () => {
         {/* Col 3: AI Architecture & Safety */}
         <div>
           <div className="flex items-center gap-1.5 text-white font-bold mb-3 text-xs uppercase tracking-wider">
-            <Shield className="w-3.5 h-3.5 text-emerald-400" />
+            <Shield className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
             <span>AI Architecture & Safety</span>
           </div>
           <ul className="space-y-1.5 text-[11px] text-slate-400">
@@ -50,7 +50,7 @@ export const Footer: React.FC = () => {
         {/* Col 4: Privacy & Medical Notice */}
         <div>
           <div className="flex items-center gap-1.5 text-white font-bold mb-3 text-xs uppercase tracking-wider">
-            <Lock className="w-3.5 h-3.5 text-sky-400" />
+            <Lock className="w-3.5 h-3.5 text-sky-400" aria-hidden="true" />
             <span>Privacy & Ethics</span>
           </div>
           <ul className="space-y-1.5 text-[11px] text-slate-400">
@@ -71,11 +71,13 @@ export const Footer: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-1 text-[11px] text-slate-400 shrink-0">
-          <HeartHandshake className="w-3.5 h-3.5 text-teal-400" />
+          <HeartHandshake className="w-3.5 h-3.5 text-teal-400" aria-hidden="true" />
           <span>PromptWars Virtual Challenge 6</span>
         </div>
       </div>
     </footer>
   );
-};
+});
+
+Footer.displayName = 'Footer';
 

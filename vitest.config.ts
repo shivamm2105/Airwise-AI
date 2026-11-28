@@ -7,7 +7,13 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./tests/setup.ts'],
     include: ['tests/**/*.test.{ts,tsx}'],
-    testTimeout: 10000
+    testTimeout: 10000,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json-summary'],
+      include: ['shared/**/*.ts', 'server/src/**/*.ts', 'client/src/**/*.{ts,tsx}'],
+      exclude: ['**/*.d.ts', '**/main.tsx', 'server/src/index.ts', 'shared/types.ts', 'server/src/providers/AirQualityProvider.ts']
+    }
   },
   resolve: {
     alias: {
@@ -16,4 +22,3 @@ export default defineConfig({
     }
   }
 });
-

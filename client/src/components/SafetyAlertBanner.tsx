@@ -6,7 +6,7 @@ interface SafetyAlertBannerProps {
   safety: SafetyEvaluation;
 }
 
-export const SafetyAlertBanner: React.FC<SafetyAlertBannerProps> = ({ safety }) => {
+export const SafetyAlertBanner: React.FC<SafetyAlertBannerProps> = React.memo(({ safety }) => {
   return (
     <div className="space-y-3 my-4" role="region" aria-label="Environmental Safety Advisories">
       {/* 1. Severe Smog Alert (if active) */}
@@ -78,5 +78,7 @@ export const SafetyAlertBanner: React.FC<SafetyAlertBannerProps> = ({ safety }) 
       </div>
     </div>
   );
-};
+});
+
+SafetyAlertBanner.displayName = 'SafetyAlertBanner';
 

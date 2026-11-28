@@ -9,6 +9,7 @@ export default {
     extend: {
       colors: {
         navy: {
+          950: '#070B16',
           900: '#0B1120',
           800: '#111C33',
           700: '#1A294A',
@@ -22,7 +23,8 @@ export default {
         emerald: {
           400: '#34D399',
           500: '#10B981',
-          600: '#059669'
+          600: '#059669',
+          700: '#047857'
         },
         pollution: {
           good: '#10B981',
@@ -34,10 +36,9 @@ export default {
         }
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif']
+        sans: ['system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif']
       }
     },
   },
   plugins: [],
 }
-

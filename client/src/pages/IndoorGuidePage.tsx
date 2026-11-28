@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
-import { AirQualityData, HouseholdPreferences } from '@shared/types';
+import React, { useState, useEffect } from 'react';
+import { AirQualityData, CookingType, HouseholdPreferences } from '@shared/types';
+import { mergeHouseholdPreferences } from '@shared/preferences';
 import { api } from '../services/api';
+import { InlineFeedbackBanner } from '../components/InlineFeedbackBanner';
 import {
   Home,
   Wind,
@@ -18,27 +20,28 @@ interface IndoorGuidePageProps {
   onUpdatePreferences?: (prefs: HouseholdPreferences) => void;
 }
 
-export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({ airQuality, preferences, onUpdatePreferences }) => {
+export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({
+  airQuality,
+  preferences,
+  onUpdatePreferences
+}) => {
   const [roomSizeSqFt, setRoomSizeSqFt] = useState<number>(200);
   const [hasHEPA, setHasHEPA] = useState<boolean>(preferences?.hasAirPurifier ?? true);
-  const [cookingType, setCookingType] = useState<string>(
-    preferences?.cookingType === 'induction_electric'
-      ? 'induction'
-      : preferences?.cookingType === 'gas_unvented'
-      ? 'gas_unvented'
-      : preferences?.cookingType === 'biomass_chulha'
-      ? 'biomass'
-      : 'gas_exhaust'
+  const [cookingType, setCookingType] = useState<CookingType>(
+    preferences?.cookingType ?? 'gas_with_exhaust'
   );
   const [usesIncense, setUsesIncense] = useState<boolean>(
     (preferences?.indoorCombustionSources?.length ?? 0) > 0
   );
-  const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
+  const [feedback, setFeedback] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
 
-  // Compute recommended CADR (Clean Air Delivery Rate)
-  // CADR (cfm) = (Room Volume in cu ft * ACH) / 60
-  // Standard ceiling height 8 ft -> Room Volume = roomSizeSqFt * 8
-  // Recommended ACH = 4 (for pollution protection)
+  useEffect(() => {
+    if (!preferences) return;
+    setHasHEPA(preferences.hasAirPurifier);
+    setCookingType(preferences.cookingType);
+    setUsesIncense((preferences.indoorCombustionSources?.length ?? 0) > 0);
+  }, [preferences]);
+
   const roomVolumeCuFt = roomSizeSqFt * 8;
   const recommendedCADR = Math.round((roomVolumeCuFt * 4) / 60);
 
@@ -46,38 +49,22 @@ export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({ airQuality, pr
   const isOutdoorSevere = outdoorAQI > 150;
 
   const handleSaveIndoorProfile = async () => {
-    const updatedCooking =
-      cookingType === 'induction'
-        ? 'induction_electric'
-        : cookingType === 'gas_unvented'
-        ? 'gas_unvented'
-        : cookingType === 'biomass'
-        ? 'biomass_chulha'
-        : 'gas_with_exhaust';
-
-    const updatedPrefs: HouseholdPreferences = {
-      householdSize: preferences?.householdSize || 3,
-      hasChildren: preferences?.hasChildren || false,
-      hasElderly: preferences?.hasElderly || false,
-      hasRespiratorySensitivity: preferences?.hasRespiratorySensitivity || false,
-      commuteMode: preferences?.commuteMode || 'public_transit',
-      commuteDistanceKm: preferences?.commuteDistanceKm || 10,
-      homeType: preferences?.homeType || 'apartment',
-      ventilationType: preferences?.ventilationType || 'natural_cross',
+    setFeedback(null);
+    const updatedPrefs = mergeHouseholdPreferences(preferences, {
       hasAirPurifier: hasHEPA,
       purifierFilterType: hasHEPA ? 'HEPA' : 'none',
-      cookingType: updatedCooking,
+      cookingType,
       indoorCombustionSources: usesIncense ? ['incense_agarbatti', 'candles'] : [],
       sustainabilityFocus: preferences?.sustainabilityFocus || 'exposure_reduction'
-    };
+    });
 
     try {
       const res = await api.updatePreferences(updatedPrefs);
       if (onUpdatePreferences) onUpdatePreferences(res);
-      setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 3000);
-    } catch {
-      alert('Unable to save indoor profile right now.');
+      setFeedback({ variant: 'success', message: 'Indoor setup saved to your household profile.' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unable to save indoor profile right now.';
+      setFeedback({ variant: 'error', message: msg });
     }
   };
 
@@ -87,11 +74,11 @@ export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({ airQuality, pr
       <div className="bg-navy-800/90 border border-slate-700/80 rounded-2xl p-5 shadow-md">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-xl bg-teal-500/15 text-teal-400">
-            <Home className="w-5 h-5" />
+            <Home className="w-5 h-5" aria-hidden="true" />
           </div>
           <div>
             <h1 className="text-xl font-bold text-white flex items-center gap-2">
-              <span>Indoor Air Quality & Clean Air Zone Guide</span>
+              <span>Indoor Air Quality &amp; Clean Air Zone Guide</span>
             </h1>
             <p className="text-xs text-slate-300 mt-0.5">
               Source control, mechanical HEPA filtration, and outdoor-aware ventilation
@@ -99,26 +86,35 @@ export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({ airQuality, pr
           </div>
         </div>
 
-        {/* Sensor Honesty Disclaimer */}
         <div className="mt-4 p-3 rounded-xl bg-navy-900 border border-slate-700/80 text-xs text-slate-400 flex items-start gap-2.5">
-          <Info className="w-4 h-4 text-teal-400 shrink-0 mt-0.5" />
+          <Info className="w-4 h-4 text-teal-400 shrink-0 mt-0.5" aria-hidden="true" />
           <p className="leading-relaxed">
             <strong className="text-slate-300">Measurement Transparency:</strong> Without dedicated calibrated indoor sensors in your living room, AirWise AI provides verified structural guidelines and particle mitigation principles. We never fabricate exact numerical indoor AQI readings from outdoor weather models alone.
           </p>
         </div>
       </div>
 
+      {feedback && (
+        <InlineFeedbackBanner
+          variant={feedback.variant}
+          message={feedback.message}
+          onDismiss={() => setFeedback(null)}
+        />
+      )}
+
       {/* Interactive Room & Device Configuration */}
       <div className="bg-navy-800/80 border border-slate-700/80 rounded-2xl p-5 shadow-lg space-y-5">
         <h2 className="text-base font-bold text-white flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-teal-400" />
-          <span>Interactive Room & Appliance Sizing</span>
+          <Sparkles className="w-4 h-4 text-teal-400" aria-hidden="true" />
+          <span>Interactive Room &amp; Appliance Sizing</span>
         </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
           {/* Room Size */}
           <div className="p-4 rounded-xl bg-navy-900 border border-slate-800 space-y-2">
-            <label htmlFor="room-size-range" className="font-semibold text-slate-300 block">Room Floor Area</label>
+            <label htmlFor="room-size-range" className="font-semibold text-slate-300 block">
+              Room Floor Area
+            </label>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-extrabold text-teal-400">{roomSizeSqFt}</span>
               <span className="text-slate-400">sq. ft. (~{Math.round(roomSizeSqFt * 0.093)} m²)</span>
@@ -131,31 +127,37 @@ export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({ airQuality, pr
               max="600"
               step="50"
               value={roomSizeSqFt}
-              onChange={e => setRoomSizeSqFt(Number(e.target.value))}
+              onChange={e => setRoomSizeSqFt(Math.min(600, Math.max(100, Number(e.target.value) || 100)))}
               className="w-full accent-teal-500 cursor-pointer"
             />
           </div>
 
           {/* Air Purifier */}
           <div className="p-4 rounded-xl bg-navy-900 border border-slate-800 space-y-2">
-            <label className="font-semibold text-slate-300 block">Existing Air Purifier</label>
-            <div className="flex gap-2">
+            <span id="purifier-group-label" className="font-semibold text-slate-300 block">
+              Existing Air Purifier
+            </span>
+            <div className="flex gap-2" role="group" aria-labelledby="purifier-group-label">
               <button
+                type="button"
+                aria-pressed={hasHEPA}
                 onClick={() => setHasHEPA(true)}
                 className={`flex-1 py-2 rounded-lg font-bold text-xs transition-colors ${
                   hasHEPA
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-navy-800 text-slate-400 border border-slate-700'
+                    ? 'bg-emerald-700 text-white'
+                    : 'bg-navy-800 text-slate-300 border border-slate-700'
                 }`}
               >
                 HEPA Purifier
               </button>
               <button
+                type="button"
+                aria-pressed={!hasHEPA}
                 onClick={() => setHasHEPA(false)}
                 className={`flex-1 py-2 rounded-lg font-bold text-xs transition-colors ${
                   !hasHEPA
-                    ? 'bg-amber-600 text-white'
-                    : 'bg-navy-800 text-slate-400 border border-slate-700'
+                    ? 'bg-amber-500 text-navy-950'
+                    : 'bg-navy-800 text-slate-300 border border-slate-700'
                 }`}
               >
                 None / Basic
@@ -168,42 +170,51 @@ export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({ airQuality, pr
 
           {/* Cooking Setup */}
           <div className="p-4 rounded-xl bg-navy-900 border border-slate-800 space-y-2">
-            <label className="font-semibold text-slate-300 block">Cooking Arrangement</label>
+            <label htmlFor="cooking-arrangement-select" className="font-semibold text-slate-300 block">
+              Cooking Arrangement
+            </label>
             <select
+              id="cooking-arrangement-select"
               value={cookingType}
-              onChange={e => setCookingType(e.target.value)}
-              className="w-full p-2 rounded-lg bg-navy-800 border border-slate-700 text-white text-xs focus:border-teal-500 focus:outline-none"
+              onChange={e => setCookingType(e.target.value as CookingType)}
+              className="w-full p-2 rounded-lg bg-navy-800 border border-slate-700 text-white text-xs focus:border-teal-500"
             >
-              <option value="induction">Electric Induction (Cleanest)</option>
-              <option value="gas_exhaust">Gas Stove with Exhaust Hood</option>
+              <option value="induction_electric">Electric Induction (Cleanest)</option>
+              <option value="gas_with_exhaust">Gas Stove with Exhaust Hood</option>
               <option value="gas_unvented">Gas Stove (No Range Hood)</option>
-              <option value="biomass">Biomass / Chulha (High Smoke)</option>
+              <option value="biomass_chulha">Biomass / Chulha (High Smoke)</option>
             </select>
             <span className="text-[11px] text-slate-400 block">
-              {cookingType === 'induction' ? 'Zero combustion byproducts' : 'Generates fine NO2 and soot'}
+              {cookingType === 'induction_electric' ? 'Zero combustion byproducts' : 'Generates fine NO2 and soot'}
             </span>
           </div>
 
           {/* Indoor Combustion Sources */}
           <div className="p-4 rounded-xl bg-navy-900 border border-slate-800 space-y-2">
-            <label className="font-semibold text-slate-300 block">Incense or Candles?</label>
-            <div className="flex gap-2">
+            <span id="incense-group-label" className="font-semibold text-slate-300 block">
+              Incense or Candles?
+            </span>
+            <div className="flex gap-2" role="group" aria-labelledby="incense-group-label">
               <button
+                type="button"
+                aria-pressed={!usesIncense}
                 onClick={() => setUsesIncense(false)}
                 className={`flex-1 py-2 rounded-lg font-bold text-xs transition-colors ${
                   !usesIncense
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-navy-800 text-slate-400 border border-slate-700'
+                    ? 'bg-emerald-700 text-white'
+                    : 'bg-navy-800 text-slate-300 border border-slate-700'
                 }`}
               >
                 None
               </button>
               <button
+                type="button"
+                aria-pressed={usesIncense}
                 onClick={() => setUsesIncense(true)}
                 className={`flex-1 py-2 rounded-lg font-bold text-xs transition-colors ${
                   usesIncense
                     ? 'bg-rose-700 text-white'
-                    : 'bg-navy-800 text-slate-400 border border-slate-700'
+                    : 'bg-navy-800 text-slate-300 border border-slate-700'
                 }`}
               >
                 Burned Regularly
@@ -227,21 +238,20 @@ export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({ airQuality, pr
           </div>
           <div className="px-4 py-2 rounded-xl bg-navy-900 border border-teal-500/40 text-center shrink-0">
             <span className="text-xs text-slate-400 uppercase tracking-wider block">Target CADR</span>
-            <span className="text-xl font-extrabold text-teal-400">
-              &ge; {recommendedCADR} CFM
-            </span>
+            <span className="text-xl font-extrabold text-teal-400">&ge; {recommendedCADR} CFM</span>
             <span className="text-[10px] text-slate-400 block">(~{Math.round(recommendedCADR * 1.7)} m³/h)</span>
           </div>
         </div>
 
         <div className="flex justify-end pt-1">
           <button
+            type="button"
             onClick={handleSaveIndoorProfile}
-            className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs flex items-center gap-2 shadow-md transition-colors"
+            className="px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-600 text-white font-bold text-xs flex items-center gap-2 shadow-md transition-colors"
           >
-            {savedSuccess ? (
+            {feedback?.variant === 'success' ? (
               <>
-                <CheckCircle className="w-4 h-4 text-emerald-300" />
+                <CheckCircle className="w-4 h-4 text-emerald-300" aria-hidden="true" />
                 <span>Saved to Profile!</span>
               </>
             ) : (
@@ -253,11 +263,10 @@ export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({ airQuality, pr
 
       {/* Key Indoor Modules Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs">
-        {/* Module 1: Ventilation Strategy */}
         <div className="p-5 rounded-2xl bg-navy-800/80 border border-slate-700/80 space-y-3">
           <div className="flex items-center gap-2">
             <div className="p-2 rounded-lg bg-sky-950 text-sky-400 border border-sky-500/30">
-              <Wind className="w-4 h-4" />
+              <Wind className="w-4 h-4" aria-hidden="true" />
             </div>
             <h3 className="text-base font-bold text-white">Outdoor-Aware Ventilation Protocol</h3>
           </div>
@@ -270,23 +279,22 @@ export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({ airQuality, pr
 
           <div className="p-3 rounded-xl bg-navy-900 border border-slate-800 space-y-1.5 text-slate-300">
             <div className="flex items-center gap-2">
-              <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" aria-hidden="true" />
               <span>Use door sweeps or rolled draft stoppers to block hallway smoke draft.</span>
             </div>
             <div className="flex items-center gap-2">
-              <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" aria-hidden="true" />
               <span>Never open windows during morning rush-hour temperature inversion.</span>
             </div>
           </div>
         </div>
 
-        {/* Module 2: HEPA Filter Maintenance */}
         <div className="p-5 rounded-2xl bg-navy-800/80 border border-slate-700/80 space-y-3">
           <div className="flex items-center gap-2">
             <div className="p-2 rounded-lg bg-emerald-950 text-emerald-400 border border-emerald-500/30">
-              <ShieldCheck className="w-4 h-4" />
+              <ShieldCheck className="w-4 h-4" aria-hidden="true" />
             </div>
-            <h3 className="text-base font-bold text-white">HEPA Maintenance & Placement</h3>
+            <h3 className="text-base font-bold text-white">HEPA Maintenance &amp; Placement</h3>
           </div>
 
           <p className="text-slate-300 leading-relaxed">
@@ -309,13 +317,12 @@ export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({ airQuality, pr
           </ul>
         </div>
 
-        {/* Module 3: Cooking & Kitchen Source Control */}
         <div className="p-5 rounded-2xl bg-navy-800/80 border border-slate-700/80 space-y-3">
           <div className="flex items-center gap-2">
             <div className="p-2 rounded-lg bg-amber-950 text-amber-400 border border-amber-500/30">
-              <Flame className="w-4 h-4" />
+              <Flame className="w-4 h-4" aria-hidden="true" />
             </div>
-            <h3 className="text-base font-bold text-white">Cooking Exhaust & Kitchen Hygiene</h3>
+            <h3 className="text-base font-bold text-white">Cooking Exhaust &amp; Kitchen Hygiene</h3>
           </div>
 
           <p className="text-slate-300 leading-relaxed">
@@ -324,23 +331,22 @@ export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({ airQuality, pr
 
           <div className="p-3 rounded-xl bg-navy-900 border border-slate-800 space-y-1.5 text-slate-300">
             <div className="flex items-center gap-2">
-              <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" aria-hidden="true" />
               <span>Turn on range hood on maximum 1 minute before ignition and run 5 min after.</span>
             </div>
             <div className="flex items-center gap-2">
-              <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" aria-hidden="true" />
               <span>Isolate the kitchen by keeping adjacent living room doors closed while cooking.</span>
             </div>
           </div>
         </div>
 
-        {/* Module 4: Crucial Safety Warnings (Ozone & Houseplants) */}
         <div className="p-5 rounded-2xl bg-navy-800/80 border border-rose-900/40 space-y-3">
           <div className="flex items-center gap-2">
             <div className="p-2 rounded-lg bg-rose-950 text-rose-400 border border-rose-500/30">
-              <AlertTriangle className="w-4 h-4" />
+              <AlertTriangle className="w-4 h-4" aria-hidden="true" />
             </div>
-            <h3 className="text-base font-bold text-white">Critical Health & Appliance Warnings</h3>
+            <h3 className="text-base font-bold text-white">Critical Health &amp; Appliance Warnings</h3>
           </div>
 
           <div className="space-y-2 text-slate-300">

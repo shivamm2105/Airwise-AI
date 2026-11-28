@@ -1,207 +1,189 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { AirQualityData, HouseholdPreferences, LocationCoordinates } from '@shared/types';
-import { api } from './services/api';
+import { api, isAbortError } from './services/api';
 import { Navbar, NavTab } from './components/Navbar';
 import { Footer } from './components/Footer';
-import { LocationModal } from './components/LocationModal';
-import { LandingPage } from './pages/LandingPage';
+import { DEFAULT_LOCATION } from './constants/locations';
 import { DashboardPage } from './pages/DashboardPage';
-import { AssistantPage } from './pages/AssistantPage';
-import { DailyPlanPage } from './pages/DailyPlanPage';
-import { IndoorGuidePage } from './pages/IndoorGuidePage';
-import { SustainablePlannerPage } from './pages/SustainablePlannerPage';
-import { ImpactExplainerPage } from './pages/ImpactExplainerPage';
-import { FamilyCommunityPage } from './pages/FamilyCommunityPage';
-import { SavedActionsPage } from './pages/SavedActionsPage';
 
-// Default initial location: New Delhi (Urban smog case study)
-const DEFAULT_LOCATION: LocationCoordinates = {
-  name: 'New Delhi',
-  region: 'Delhi',
-  country: 'India',
-  latitude: 28.6139,
-  longitude: 77.2090,
-  timezone: 'Asia/Kolkata'
-};
+const LandingPage = lazy(() => import('./pages/LandingPage').then(m => ({ default: m.LandingPage })));
+const AssistantPage = lazy(() => import('./pages/AssistantPage').then(m => ({ default: m.AssistantPage })));
+const DailyPlanPage = lazy(() => import('./pages/DailyPlanPage').then(m => ({ default: m.DailyPlanPage })));
+const IndoorGuidePage = lazy(() => import('./pages/IndoorGuidePage').then(m => ({ default: m.IndoorGuidePage })));
+const SustainablePlannerPage = lazy(() =>
+  import('./pages/SustainablePlannerPage').then(m => ({ default: m.SustainablePlannerPage }))
+);
+const ImpactExplainerPage = lazy(() =>
+  import('./pages/ImpactExplainerPage').then(m => ({ default: m.ImpactExplainerPage }))
+);
+const FamilyCommunityPage = lazy(() =>
+  import('./pages/FamilyCommunityPage').then(m => ({ default: m.FamilyCommunityPage }))
+);
+const SavedActionsPage = lazy(() =>
+  import('./pages/SavedActionsPage').then(m => ({ default: m.SavedActionsPage }))
+);
+const LocationModal = lazy(() => import('./components/LocationModal').then(m => ({ default: m.LocationModal })));
 
-const INITIAL_BASELINE_AIR_QUALITY: AirQualityData = {
-  location: DEFAULT_LOCATION,
-  aqi: 198,
-  category: 'UNHEALTHY',
-  categoryLabel: 'Unhealthy (Smog)',
-  healthImplications: 'Air quality is unhealthy. Sensitive groups and children should avoid prolonged outdoor exertion.',
-  indexStandard: 'CPCB_AQI',
-  dominantPollutant: 'PM2.5',
-  pollutants: {
-    pm2_5: 88.5,
-    pm10: 165.0,
-    no2: 42.1,
-    so2: 12.3,
-    o3: 28.4,
-    co: 1.15
-  },
-  hourlyForecast: Array.from({ length: 24 }, (_, i) => {
-    const d = new Date();
-    d.setHours(d.getHours() + i);
-    return {
-      time: d.toISOString(),
-      aqi: Math.round(160 + Math.sin(i / 3) * 35),
-      pm2_5: Math.round(75 + Math.sin(i / 3) * 20),
-      pm10: Math.round(150 + Math.sin(i / 3) * 30),
-      category: 'UNHEALTHY'
-    };
-  }),
-  provider: 'open-meteo',
-  observedAt: new Date().toISOString(),
-  fetchedAt: new Date().toISOString(),
-  isStale: false,
-  isDemo: false,
-  qualityMetadata: {
-    isReliable: true,
-    missingPollutants: [],
-    attribution: 'Copernicus CAMS & Open-Meteo Atmospheric Stations'
-  }
-};
+const RouteFallback: React.FC = () => (
+  <div className="py-24 text-center text-xs text-slate-400" role="status" aria-live="polite">
+    Loading section...
+  </div>
+);
 
 export const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
   const [currentLocation, setCurrentLocation] = useState<LocationCoordinates>(DEFAULT_LOCATION);
   const [locationModalOpen, setLocationModalOpen] = useState<boolean>(false);
 
-  const [airQuality, setAirQuality] = useState<AirQualityData | null>(INITIAL_BASELINE_AIR_QUALITY);
-  const [loading, setLoading] = useState<boolean>(false);
+  // Never initialize fake pollution measurements as live readings; DashboardPage reserves layout height to prevent CLS
+  const [airQuality, setAirQuality] = useState<AirQualityData | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   const [preferences, setPreferences] = useState<HouseholdPreferences | null>(null);
+  const [preferencesRequested, setPreferencesRequested] = useState<boolean>(false);
 
-  // Fetch initial preferences
   useEffect(() => {
-    api.getPreferences()
+    if (
+      preferencesRequested ||
+      currentTab === 'dashboard' ||
+      currentTab === 'landing' ||
+      currentTab === 'impact' ||
+      currentTab === 'saved'
+    ) {
+      return;
+    }
+
+    setPreferencesRequested(true);
+    api
+      .getPreferences()
       .then(p => {
         if (p) setPreferences(p);
       })
       .catch(() => {
-        // Fallback or memory
+        // Non-fatal: defaults will apply until preferences are saved
       });
-  }, []);
+  }, [currentTab, preferencesRequested]);
 
-  // Fetch air quality data whenever location changes
-  const loadAirQuality = async (loc: LocationCoordinates) => {
+  const loadAirQuality = useCallback(async (loc: LocationCoordinates, signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.getAirQuality({
-        latitude: loc.latitude,
-        longitude: loc.longitude,
-        city: loc.name
-      });
+      const data = await api.getAirQuality(
+        {
+          latitude: loc.latitude,
+          longitude: loc.longitude,
+          city: loc.name
+        },
+        signal
+      );
       setAirQuality(data);
     } catch (err: unknown) {
+      if (isAbortError(err)) return;
       const msg = err instanceof Error ? err.message : 'Unable to connect to air quality service.';
       setError(msg);
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
-  };
+  }, []);
 
   useEffect(() => {
-    loadAirQuality(currentLocation);
-  }, [currentLocation.latitude, currentLocation.longitude]);
+    const controller = new AbortController();
+    loadAirQuality(currentLocation, controller.signal);
+    return () => controller.abort();
+  }, [currentLocation, loadAirQuality]);
 
-  const handleSelectLocation = (loc: LocationCoordinates) => {
+  const handleSelectLocation = useCallback((loc: LocationCoordinates) => {
+    setAirQuality(null);
     setCurrentLocation(loc);
-  };
+  }, []);
+
+  const handleOpenLocationModal = useCallback(() => setLocationModalOpen(true), []);
+  const handleCloseLocationModal = useCallback(() => setLocationModalOpen(false), []);
+  const handleRefresh = useCallback(() => {
+    loadAirQuality(currentLocation);
+  }, [currentLocation, loadAirQuality]);
 
   return (
     <div className="min-h-screen flex flex-col bg-navy-900 text-slate-100 selection:bg-teal-500 selection:text-white">
-      {/* Navigation Header */}
       <Navbar
         currentTab={currentTab}
         onSelectTab={setCurrentTab}
         currentLocation={currentLocation}
-        onOpenLocationModal={() => setLocationModalOpen(true)}
+        onOpenLocationModal={handleOpenLocationModal}
       />
 
-      {/* Main Content View Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-4" id="main-content">
-        {currentTab === 'landing' && (
-          <LandingPage
-            onNavigate={setCurrentTab}
-            onOpenLocation={() => setLocationModalOpen(true)}
-          />
-        )}
-
-        {currentTab === 'dashboard' && (
+        {currentTab === 'dashboard' ? (
           <DashboardPage
             data={airQuality}
             loading={loading}
             error={error}
-            onRefresh={() => loadAirQuality(currentLocation)}
-            onOpenLocation={() => setLocationModalOpen(true)}
+            onRefresh={handleRefresh}
+            onOpenLocation={handleOpenLocationModal}
             currentLocation={currentLocation}
             onNavigate={setCurrentTab}
           />
-        )}
+        ) : (
+          <Suspense fallback={<RouteFallback />}>
+            {currentTab === 'landing' && (
+              <LandingPage
+                onNavigate={setCurrentTab}
+                onOpenLocation={handleOpenLocationModal}
+              />
+            )}
 
-        {currentTab === 'plan' && (
-          <DailyPlanPage
-            airQuality={airQuality}
-            preferences={preferences}
-          />
-        )}
+            {currentTab === 'plan' && (
+              <DailyPlanPage airQuality={airQuality} preferences={preferences} />
+            )}
 
-        {currentTab === 'assistant' && (
-          <AssistantPage
-            airQuality={airQuality}
-            preferences={preferences}
-          />
-        )}
+            {currentTab === 'assistant' && (
+              <AssistantPage airQuality={airQuality} preferences={preferences} />
+            )}
 
-        {currentTab === 'indoor' && (
-          <IndoorGuidePage
-            airQuality={airQuality}
-            preferences={preferences}
-            onUpdatePreferences={setPreferences}
-          />
-        )}
+            {currentTab === 'indoor' && (
+              <IndoorGuidePage
+                airQuality={airQuality}
+                preferences={preferences}
+                onUpdatePreferences={setPreferences}
+              />
+            )}
 
-        {currentTab === 'sustainable' && (
-          <SustainablePlannerPage
-            airQuality={airQuality}
-            preferences={preferences}
-          />
-        )}
+            {currentTab === 'sustainable' && (
+              <SustainablePlannerPage airQuality={airQuality} preferences={preferences} />
+            )}
 
-        {currentTab === 'impact' && (
-          <ImpactExplainerPage />
-        )}
+            {currentTab === 'impact' && <ImpactExplainerPage />}
 
-        {currentTab === 'community' && (
-          <FamilyCommunityPage
-            airQuality={airQuality}
-            preferences={preferences}
-            onUpdatePreferences={setPreferences}
-          />
-        )}
+            {currentTab === 'community' && (
+              <FamilyCommunityPage
+                airQuality={airQuality}
+                preferences={preferences}
+                onUpdatePreferences={setPreferences}
+              />
+            )}
 
-        {currentTab === 'saved' && (
-          <SavedActionsPage />
+            {currentTab === 'saved' && <SavedActionsPage />}
+          </Suspense>
         )}
       </main>
 
-      {/* Footer */}
       <Footer />
 
-      {/* Location Modal */}
-      <LocationModal
-        isOpen={locationModalOpen}
-        onClose={() => setLocationModalOpen(false)}
-        currentLocation={currentLocation}
-        onSelectLocation={handleSelectLocation}
-      />
+      {locationModalOpen && (
+        <Suspense fallback={null}>
+          <LocationModal
+            isOpen={locationModalOpen}
+            onClose={handleCloseLocationModal}
+            currentLocation={currentLocation}
+            onSelectLocation={handleSelectLocation}
+          />
+        </Suspense>
+      )}
     </div>
   );
 };
 
 export default App;
-

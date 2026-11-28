@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { HouseholdPreferences, SavedActionRecord } from '../../../shared/types.js';
@@ -5,31 +6,28 @@ import { HouseholdPreferences, SavedActionRecord } from '../../../shared/types.j
 interface StorageSchema {
   savedActions: SavedActionRecord[];
   preferences: HouseholdPreferences | null;
-  savedLocations: Array<{
-    name: string;
-    latitude: number;
-    longitude: number;
-    country?: string;
-    region?: string;
-    addedAt: string;
-  }>;
 }
 
 export class StorageService {
-  private filePath: string;
+  private readonly filePath: string;
   private data: StorageSchema;
 
   constructor(customPath?: string) {
     const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
-    const dir = isServerless ? '/tmp' : path.resolve(process.cwd(), 'server/data');
-    if (!fs.existsSync(dir)) {
+    const isTest = process.env.NODE_ENV === 'test';
+    const defaultDir = isServerless ? '/tmp' : path.resolve(process.cwd(), 'server/data');
+    const defaultFileName = isTest ? `airwise-test-store-${process.pid}.json` : 'airwise-store.json';
+    this.filePath = customPath || process.env.STORAGE_FILE_PATH || path.join(defaultDir, defaultFileName);
+
+    const targetDir = path.dirname(this.filePath);
+    if (!fs.existsSync(targetDir)) {
       try {
-        fs.mkdirSync(dir, { recursive: true });
+        fs.mkdirSync(targetDir, { recursive: true });
       } catch {
-        // Fallback to process.cwd() or memory
+        // Fallback silently to in-memory storage if directory creation is denied
       }
     }
-    this.filePath = customPath || path.join(dir, 'airwise-store.json');
+
     this.data = this.loadData();
   }
 
@@ -37,43 +35,65 @@ export class StorageService {
     try {
       if (fs.existsSync(this.filePath)) {
         const raw = fs.readFileSync(this.filePath, 'utf-8');
-        return JSON.parse(raw);
+        const parsed = JSON.parse(raw) as Partial<StorageSchema>;
+        return {
+          savedActions: Array.isArray(parsed.savedActions) ? parsed.savedActions : [],
+          preferences: parsed.preferences ?? null
+        };
       }
     } catch (err) {
       console.warn('Failed to read storage file, initializing fresh store:', err);
     }
     return {
       savedActions: [],
-      preferences: null,
-      savedLocations: []
+      preferences: null
     };
   }
 
   private persist(): void {
+    const serialized = JSON.stringify(this.data, null, 2);
+    const tempPath = `${this.filePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
     try {
-      const tempPath = `${this.filePath}.tmp`;
-      fs.writeFileSync(tempPath, JSON.stringify(this.data, null, 2), 'utf-8');
-      fs.renameSync(tempPath, this.filePath);
+      fs.writeFileSync(tempPath, serialized, 'utf-8');
+      try {
+        fs.renameSync(tempPath, this.filePath);
+      } catch (renameErr: unknown) {
+        const code = (renameErr as NodeJS.ErrnoException)?.code;
+        if (code === 'EPERM' || code === 'EBUSY') {
+          // Windows NTFS fallback when another reader/worker briefly locks destination metadata
+          fs.writeFileSync(this.filePath, serialized, 'utf-8');
+          if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+        } else {
+          throw renameErr;
+        }
+      }
     } catch (err) {
+      if (fs.existsSync(tempPath)) {
+        try {
+          fs.unlinkSync(tempPath);
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
       console.error('Failed to persist storage to disk:', err);
     }
   }
 
   // Saved Actions CRUD
   public getSavedActions(): SavedActionRecord[] {
-    return [...this.data.savedActions];
+    return this.data.savedActions.map(action => ({ ...action }));
   }
 
   public saveAction(item: Omit<SavedActionRecord, 'id' | 'savedAt' | 'completed'>): SavedActionRecord {
     const record: SavedActionRecord = {
       ...item,
-      id: `act_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      id: `act_${crypto.randomUUID()}`,
       savedAt: new Date().toISOString(),
       completed: false
     };
     this.data.savedActions.unshift(record);
     this.persist();
-    return record;
+    return { ...record };
   }
 
   public toggleActionCompletion(id: string): SavedActionRecord | null {
@@ -83,7 +103,7 @@ export class StorageService {
     item.completed = !item.completed;
     item.completedAt = item.completed ? new Date().toISOString() : undefined;
     this.persist();
-    return item;
+    return { ...item };
   }
 
   public deleteSavedAction(id: string): boolean {
@@ -103,32 +123,20 @@ export class StorageService {
 
   // Preferences CRUD
   public getPreferences(): HouseholdPreferences | null {
-    return this.data.preferences;
+    if (!this.data.preferences) return null;
+    return {
+      ...this.data.preferences,
+      indoorCombustionSources: [...this.data.preferences.indoorCombustionSources]
+    };
   }
 
   public savePreferences(prefs: HouseholdPreferences): void {
-    this.data.preferences = prefs;
-    this.persist();
-  }
-
-  // Saved Locations CRUD
-  public getSavedLocations() {
-    return [...this.data.savedLocations];
-  }
-
-  public saveLocation(loc: { name: string; latitude: number; longitude: number; country?: string; region?: string }) {
-    if (!this.data.savedLocations.some(l => l.name === loc.name && Math.abs(l.latitude - loc.latitude) < 0.01)) {
-      this.data.savedLocations.push({ ...loc, addedAt: new Date().toISOString() });
-      this.persist();
-    }
-    return this.data.savedLocations;
-  }
-
-  public removeLocation(name: string): void {
-    this.data.savedLocations = this.data.savedLocations.filter(l => l.name !== name);
+    this.data.preferences = {
+      ...prefs,
+      indoorCombustionSources: [...prefs.indoorCombustionSources]
+    };
     this.persist();
   }
 }
 
 export const storageService = new StorageService();
-

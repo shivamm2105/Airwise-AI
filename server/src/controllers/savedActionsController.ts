@@ -1,6 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import { storageService } from '../services/StorageService.js';
-import { HouseholdPreferencesSchema, SavedActionInputSchema } from '../../../shared/schemas.js';
+import {
+  HouseholdPreferencesSchema,
+  SavedActionIdParamSchema,
+  SavedActionInputSchema
+} from '../../../shared/schemas.js';
 
 export function getSavedActions(_req: Request, res: Response, next: NextFunction): void {
   try {
@@ -23,7 +27,7 @@ export function saveAction(req: Request, res: Response, next: NextFunction): voi
 
 export function toggleActionCompletion(req: Request, res: Response, next: NextFunction): void {
   try {
-    const { id } = req.params;
+    const { id } = SavedActionIdParamSchema.parse(req.params);
     const updated = storageService.toggleActionCompletion(id);
     if (!updated) {
       res.status(404).json({ error: 'Not Found', message: `No saved action found with id ${id}` });
@@ -37,7 +41,7 @@ export function toggleActionCompletion(req: Request, res: Response, next: NextFu
 
 export function deleteAction(req: Request, res: Response, next: NextFunction): void {
   try {
-    const { id } = req.params;
+    const { id } = SavedActionIdParamSchema.parse(req.params);
     const success = storageService.deleteSavedAction(id);
     if (!success) {
       res.status(404).json({ error: 'Not Found', message: `No saved action found with id ${id}` });

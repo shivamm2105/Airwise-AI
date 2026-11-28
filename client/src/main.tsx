@@ -2,14 +2,14 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
+import { primeDefaultAirQuality } from './services/api';
+import { DEFAULT_LOCATION } from './constants/locations';
 
-// Non-blocking asynchronous font loading
-if (typeof document !== 'undefined') {
-  const fontLink = document.createElement('link');
-  fontLink.rel = 'stylesheet';
-  fontLink.href = 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap';
-  document.head.appendChild(fontLink);
-}
+primeDefaultAirQuality({
+  latitude: DEFAULT_LOCATION.latitude,
+  longitude: DEFAULT_LOCATION.longitude,
+  city: DEFAULT_LOCATION.name
+});
 
 const rootElement = document.getElementById('root');
 if (rootElement) {
@@ -19,4 +19,3 @@ if (rootElement) {
     </React.StrictMode>
   );
 }
-
