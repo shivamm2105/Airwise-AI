@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from 'vitest';
 import { evaluateSafetyRules } from '../../shared/safetyRules.js';
 import { PollutantMeasurements } from '../../shared/types.js';
@@ -12,6 +13,15 @@ describe('Safety Rules Engine Unit Tests', () => {
     co: 0.5
   };
 
+  const moderatePollutants: PollutantMeasurements = {
+    pm2_5: 25.0,
+    pm10: 60.0,
+    no2: 30.0,
+    so2: 10.0,
+    o3: 40.0,
+    co: 0.8
+  };
+
   const hazardousPollutants: PollutantMeasurements = {
     pm2_5: 220.0,
     pm10: 380.0,
@@ -21,7 +31,7 @@ describe('Safety Rules Engine Unit Tests', () => {
     co: 3.2
   };
 
-  it('allows outdoor exercise when AQI is Good and PM2.5 is low', () => {
+  it('allows outdoor exercise and natural ventilation when AQI is Good', () => {
     const safety = evaluateSafetyRules(35, cleanPollutants);
     expect(safety.outdoorExerciseSafe).toBe(true);
     expect(safety.severeSmogAlert).toBe(false);
@@ -29,7 +39,14 @@ describe('Safety Rules Engine Unit Tests', () => {
     expect(safety.ventilationDecision.recommended).toBe(true);
   });
 
-  it('restricts outdoor exercise during Hazardous pollution and requires N95', () => {
+  it('provides Moderate ventilation advisory when AQI is Moderate', () => {
+    const safety = evaluateSafetyRules(75, moderatePollutants);
+    expect(safety.outdoorExerciseSafe).toBe(true);
+    expect(safety.ventilationDecision.recommended).toBe(true);
+    expect(safety.ventilationDecision.reason).toContain('Moderate outdoor air');
+  });
+
+  it('restricts outdoor exercise during Hazardous pollution and mandates N95', () => {
     const safety = evaluateSafetyRules(350, hazardousPollutants);
     expect(safety.outdoorExerciseSafe).toBe(false);
     expect(safety.severeSmogAlert).toBe(true);
@@ -39,17 +56,9 @@ describe('Safety Rules Engine Unit Tests', () => {
     expect(safety.deterministicRulesApplied).toContain('RULE_OUTDOOR_EXERCISE_RESTRICTED');
   });
 
-  it('restricts outdoor exercise for sensitive households at AQI 125', () => {
-    const moderatePollutants: PollutantMeasurements = {
-      pm2_5: 45.0,
-      pm10: 80.0,
-      no2: 30.0,
-      so2: 10.0,
-      o3: 40.0,
-      co: 0.8
-    };
-
-    const safety = evaluateSafetyRules(125, moderatePollutants, {
+  it('restricts outdoor exercise for sensitive households at AQI 125 and limits ventilation', () => {
+    const sensitivePollutants: PollutantMeasurements = { ...moderatePollutants, pm2_5: 45.0 };
+    const safety = evaluateSafetyRules(125, sensitivePollutants, {
       hasChildren: true,
       hasRespiratorySensitivity: true
     });
@@ -57,22 +66,15 @@ describe('Safety Rules Engine Unit Tests', () => {
     expect(safety.outdoorExerciseSafe).toBe(false);
     expect(safety.childrenOutdoorPlaySafe).toBe(false);
     expect(safety.respiratorTier).toBe('OPTIONAL_SENSITIVE');
+    expect(safety.ventilationDecision.recommended).toBe(false);
+    expect(safety.deterministicRulesApplied).toContain('RULE_VENTILATION_LIMITED');
   });
 
-  it('strictly warns against ozone generators and debunking houseplant myths', () => {
+  it('strictly warns against ozone generators, debunks houseplant myths, and notes cloth mask limits', () => {
     const safety = evaluateSafetyRules(250, hazardousPollutants);
     expect(safety.airPurifierAdvice.ozoneWarning).toContain('Do not use ozone generators');
-    expect(safety.airPurifierAdvice.houseplantRealityCheck).toContain('houseplants cannot measurably lower fine particulate matter');
-  });
-
-  it('includes clear cloth mask limitation warning', () => {
-    const safety = evaluateSafetyRules(180, hazardousPollutants);
+    expect(safety.airPurifierAdvice.houseplantRealityCheck).toContain('houseplants cannot measurably lower');
     expect(safety.clothMaskWarning).toContain('Ordinary cloth masks, surgical masks, bandanas, or scarves do NOT seal');
-  });
-
-  it('always provides non-medical emergency disclaimer', () => {
-    const safety = evaluateSafetyRules(35, cleanPollutants);
-    expect(safety.urgentMedicalAdvisory).toContain('AirWise AI provides environmental health education and general wellness guidance only');
+    expect(safety.urgentMedicalAdvisory).toContain('AirWise AI provides environmental health education');
   });
 });
-

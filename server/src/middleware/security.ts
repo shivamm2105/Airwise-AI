@@ -3,19 +3,24 @@ import cors from 'cors';
 import { RequestHandler } from 'express';
 
 const EXPLICIT_PRODUCTION_ORIGINS = ['https://airwiseaibot.vercel.app'];
+const MUTATING_HTTP_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 function getTrustedOrigins(): Set<string> {
   const origins = new Set<string>(EXPLICIT_PRODUCTION_ORIGINS);
 
+  const isCloudVercel = Boolean(process.env.VERCEL) && process.env.NODE_ENV === 'production';
   const configuredOrigin = process.env.CLIENT_ORIGIN;
   if (configuredOrigin) {
     for (const part of configuredOrigin.split(',')) {
       const trimmed = part.trim();
-      if (trimmed) origins.add(trimmed);
+      if (!trimmed) continue;
+      if (isCloudVercel && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(trimmed)) {
+        continue;
+      }
+      origins.add(trimmed);
     }
   }
 
-  // Vercel automatically sets exact deployment URLs for production & preview branches
   for (const vercelHost of [
     process.env.VERCEL_URL,
     process.env.VERCEL_BRANCH_URL,
@@ -44,7 +49,6 @@ export function isOriginAllowed(origin: string | undefined): boolean {
     return true;
   }
 
-  // Allow localhost development servers only outside cloud Vercel production runtime
   const isCloudVercel = Boolean(process.env.VERCEL) && process.env.NODE_ENV === 'production';
   if (!isCloudVercel) {
     if (/^https?:\/\/localhost(:\d+)?$/.test(origin) || /^https?:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) {
@@ -60,14 +64,18 @@ export const helmetMiddleware: RequestHandler = helmet({
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: process.env.NODE_ENV === 'production' ? ["'self'"] : ["'self'", "'unsafe-inline'"],
       fontSrc: ["'self'", 'data:'],
-      imgSrc: ["'self'", 'data:', 'https:', 'blob:'],
+      imgSrc: ["'self'", 'data:'],
       connectSrc: [
         "'self'",
         'https://air-quality-api.open-meteo.com',
         'https://geocoding-api.open-meteo.com'
-      ]
+      ],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      frameAncestors: ["'self'"],
+      formAction: ["'self'"]
     }
   },
   crossOriginEmbedderPolicy: false
@@ -79,6 +87,22 @@ export const corsMiddleware: RequestHandler = cors({
   },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
+  credentials: false,
   maxAge: 86400
 });
+
+/**
+ * Rejects state-changing requests sent from untrusted cross-origin browser contexts.
+ */
+export const blockUntrustedCrossOriginWrites: RequestHandler = (req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && MUTATING_HTTP_METHODS.has(req.method) && !isOriginAllowed(origin)) {
+    res.status(403).json({
+      status: 403,
+      error: 'Forbidden',
+      message: 'Cross-origin request blocked by security policy.'
+    });
+    return;
+  }
+  next();
+};

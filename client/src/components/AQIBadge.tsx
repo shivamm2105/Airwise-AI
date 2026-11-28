@@ -10,6 +10,58 @@ interface AQIBadgeProps {
   size?: 'sm' | 'md' | 'lg';
 }
 
+interface CategoryDisplayConfig {
+  bg: string;
+  indicator: string;
+  icon: React.ComponentType<{ className?: string }>;
+  guidance: string;
+}
+
+const AQI_CATEGORY_DISPLAY: Record<AQICategory, CategoryDisplayConfig> = {
+  GOOD: {
+    bg: 'bg-emerald-950/70 border-emerald-500/40 text-emerald-300',
+    indicator: 'bg-emerald-500',
+    icon: ShieldCheck,
+    guidance: 'Clean outdoor air. Ideal conditions for outdoor ventilation, active commuting, and outdoor exercise.'
+  },
+  MODERATE: {
+    bg: 'bg-amber-950/70 border-amber-500/40 text-amber-300',
+    indicator: 'bg-amber-500',
+    icon: AlertTriangle,
+    guidance: 'Air quality is acceptable. Extremely sensitive individuals should observe personal breathing comfort.'
+  },
+  UNHEALTHY_SENSITIVE: {
+    bg: 'bg-orange-950/70 border-orange-500/40 text-orange-300',
+    indicator: 'bg-orange-500',
+    icon: AlertTriangle,
+    guidance: 'Children, elderly individuals, and those with respiratory sensitivities should reduce extended outdoor exertion.'
+  },
+  UNHEALTHY: {
+    bg: 'bg-red-950/70 border-red-500/40 text-red-300',
+    indicator: 'bg-red-500',
+    icon: ShieldAlert,
+    guidance: 'General public may experience irritation; sensitive groups face elevated cardiovascular and lung strain.'
+  },
+  VERY_UNHEALTHY: {
+    bg: 'bg-purple-950/70 border-purple-500/40 text-purple-300',
+    indicator: 'bg-purple-500',
+    icon: AlertOctagon,
+    guidance: 'Serious health risk for everyone. Cancel outdoor activities and wear an airtight N95 respirator if traveling.'
+  },
+  HAZARDOUS: {
+    bg: 'bg-rose-950/90 border-rose-600 text-rose-200 animate-pulse',
+    indicator: 'bg-rose-600',
+    icon: AlertOctagon,
+    guidance: 'Emergency health conditions: Avoid all outdoor exertion. Keep living spaces sealed and run HEPA air filtration.'
+  },
+  UNKNOWN: {
+    bg: 'bg-slate-800 border-slate-600 text-slate-300',
+    indicator: 'bg-slate-500',
+    icon: HelpCircle,
+    guidance: 'Official air quality sensor data is currently compiling for this station.'
+  }
+};
+
 export const AQIBadge: React.FC<AQIBadgeProps> = React.memo(({
   aqi,
   category,
@@ -17,61 +69,7 @@ export const AQIBadge: React.FC<AQIBadgeProps> = React.memo(({
   standard,
   size = 'md'
 }) => {
-  const getBadgeConfig = () => {
-    switch (category) {
-      case 'GOOD':
-        return {
-          bg: 'bg-emerald-950/70 border-emerald-500/40 text-emerald-300',
-          indicator: 'bg-emerald-500',
-          icon: ShieldCheck,
-          textPrefix: 'Category: Good'
-        };
-      case 'MODERATE':
-        return {
-          bg: 'bg-amber-950/70 border-amber-500/40 text-amber-300',
-          indicator: 'bg-amber-500',
-          icon: AlertTriangle,
-          textPrefix: 'Category: Moderate'
-        };
-      case 'UNHEALTHY_SENSITIVE':
-        return {
-          bg: 'bg-orange-950/70 border-orange-500/40 text-orange-300',
-          indicator: 'bg-orange-500',
-          icon: AlertTriangle,
-          textPrefix: 'Category: Unhealthy for Sensitive'
-        };
-      case 'UNHEALTHY':
-        return {
-          bg: 'bg-red-950/70 border-red-500/40 text-red-300',
-          indicator: 'bg-red-500',
-          icon: ShieldAlert,
-          textPrefix: 'Category: Unhealthy'
-        };
-      case 'VERY_UNHEALTHY':
-        return {
-          bg: 'bg-purple-950/70 border-purple-500/40 text-purple-300',
-          indicator: 'bg-purple-500',
-          icon: AlertOctagon,
-          textPrefix: 'Category: Very Unhealthy'
-        };
-      case 'HAZARDOUS':
-        return {
-          bg: 'bg-rose-950/90 border-rose-600 text-rose-200 animate-pulse',
-          indicator: 'bg-rose-600',
-          icon: AlertOctagon,
-          textPrefix: 'Category: Hazardous'
-        };
-      default:
-        return {
-          bg: 'bg-slate-800 border-slate-600 text-slate-300',
-          indicator: 'bg-slate-500',
-          icon: HelpCircle,
-          textPrefix: 'Status: Unavailable'
-        };
-    }
-  };
-
-  const config = getBadgeConfig();
+  const config = AQI_CATEGORY_DISPLAY[category] ?? AQI_CATEGORY_DISPLAY.UNKNOWN;
   const Icon = config.icon;
 
   if (size === 'lg') {
@@ -103,13 +101,7 @@ export const AQIBadge: React.FC<AQIBadgeProps> = React.memo(({
             {aqi !== null ? `${categoryLabel} Air Quality` : 'Environmental Reading Pending'}
           </h2>
           <p className="text-sm text-slate-300 mt-2 max-w-xl leading-relaxed">
-            {category === 'HAZARDOUS' && 'Emergency health conditions: Avoid all outdoor exertion. Keep living spaces sealed and run HEPA air filtration.'}
-            {category === 'VERY_UNHEALTHY' && 'Serious health risk for everyone. Cancel outdoor activities and wear an airtight N95 respirator if traveling.'}
-            {category === 'UNHEALTHY' && 'General public may experience irritation; sensitive groups face elevated cardiovascular and lung strain.'}
-            {category === 'UNHEALTHY_SENSITIVE' && 'Children, elderly individuals, and those with respiratory sensitivities should reduce extended outdoor exertion.'}
-            {category === 'MODERATE' && 'Air quality is acceptable. Extremely sensitive individuals should observe personal breathing comfort.'}
-            {category === 'GOOD' && 'Clean outdoor air. Ideal conditions for outdoor ventilation, active commuting, and outdoor exercise.'}
-            {category === 'UNKNOWN' && 'Official air quality sensor data is currently compiling for this station.'}
+            {config.guidance}
           </p>
         </div>
       </div>
@@ -129,4 +121,3 @@ export const AQIBadge: React.FC<AQIBadgeProps> = React.memo(({
 });
 
 AQIBadge.displayName = 'AQIBadge';
-

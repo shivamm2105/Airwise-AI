@@ -179,10 +179,21 @@ export const SavedActionsPage: React.FC = () => {
           aria-valuemin={0}
           aria-valuemax={100}
         >
-          <div
-            className="h-full bg-gradient-to-r from-teal-500 to-emerald-400 rounded-full transition-all duration-300"
-            style={{ width: `${progressPercent}%` }}
-          />
+          <svg
+            viewBox="0 0 100 4"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+            className="w-full h-full block"
+          >
+            <rect
+              x="0"
+              y="0"
+              width={progressPercent}
+              height="4"
+              rx="2"
+              className="fill-teal-400 transition-all duration-300"
+            />
+          </svg>
         </div>
 
         <div className="flex items-center justify-between pt-2">

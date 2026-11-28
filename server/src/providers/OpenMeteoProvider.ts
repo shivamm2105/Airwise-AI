@@ -34,21 +34,21 @@ interface OpenMeteoHourly {
 }
 
 interface OpenMeteoResponse {
-  latitude: number;
-  longitude: number;
-  timezone: string;
   current?: OpenMeteoCurrent;
   hourly?: OpenMeteoHourly;
 }
 
 interface GeocodingResult {
-  id: number;
   name: string;
   latitude: number;
   longitude: number;
   country?: string;
   admin1?: string;
   timezone?: string;
+}
+
+function isValidNonNegative(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
 
 function parseUtcTimestamp(isoOrWallTime?: string): string {
@@ -65,11 +65,116 @@ function sanitizePollutantReading(
   name: string,
   missingPollutants: string[]
 ): number | null {
-  if (rawValue === undefined || rawValue === null || !Number.isFinite(rawValue) || rawValue < 0) {
+  if (!isValidNonNegative(rawValue)) {
     missingPollutants.push(name);
     return null;
   }
   return Number(rawValue.toFixed(1));
+}
+
+function computeRegionalAQI(
+  coords: LocationCoordinates,
+  pollutants: PollutantMeasurements,
+  rawUsAqi: number | null | undefined
+): { standard: AQIStandard; aqiValue: number | null; dominantPollutant: string | null; standardNotes: string } {
+  if (isIndiaLocation(coords) && (pollutants.pm2_5 !== null || pollutants.pm10 !== null)) {
+    const pm25Sub = pollutants.pm2_5 !== null ? calculateCPCBSubIndexPM25(pollutants.pm2_5) : null;
+    const pm10Sub = pollutants.pm10 !== null ? calculateCPCBSubIndexPM10(pollutants.pm10) : null;
+    const dominantPollutant =
+      pm25Sub !== null && pm10Sub !== null
+        ? pm25Sub >= pm10Sub
+          ? 'PM2.5'
+          : 'PM10'
+        : pm25Sub !== null
+        ? 'PM2.5'
+        : 'PM10';
+    const aqiValue =
+      pm25Sub !== null && pm10Sub !== null ? Math.max(pm25Sub, pm10Sub) : (pm25Sub ?? pm10Sub);
+
+    return {
+      standard: 'CPCB_AQI',
+      aqiValue,
+      dominantPollutant,
+      standardNotes:
+        'Indian CPCB NAQI standard applied. Calculated from validated particulate concentration breakpoints (PM2.5 & PM10).'
+    };
+  }
+
+  let aqiValue = isValidNonNegative(rawUsAqi) ? rawUsAqi : null;
+  if (aqiValue === null && pollutants.pm2_5 !== null) {
+    aqiValue = calculateUSEPASubIndexPM25(pollutants.pm2_5);
+  }
+  return {
+    standard: 'US_AQI',
+    aqiValue,
+    dominantPollutant: pollutants.pm2_5 !== null ? 'PM2.5' : null,
+    standardNotes: 'US EPA Air Quality Index scale standard.'
+  };
+}
+
+function buildHourlyForecast(
+  hourly: OpenMeteoHourly | undefined,
+  standard: AQIStandard
+): HourlyForecastPoint[] {
+  if (!hourly || !Array.isArray(hourly.time)) {
+    return [];
+  }
+
+  const times = hourly.time;
+  const pm25s = hourly.pm2_5 || [];
+  const pm10s = hourly.pm10 || [];
+  const aqis = hourly.us_aqi || [];
+
+  const nowHourUtc = new Date().toISOString().substring(0, 13);
+  let startIndex = times.findIndex(t => t >= nowHourUtc);
+  if (startIndex < 0) startIndex = 0;
+
+  const points: HourlyForecastPoint[] = [];
+  for (let i = startIndex; i < Math.min(times.length, startIndex + 24); i++) {
+    const p25 = isValidNonNegative(pm25s[i]) ? pm25s[i] : null;
+    const p10 = isValidNonNegative(pm10s[i]) ? pm10s[i] : null;
+    let ptAqi = isValidNonNegative(aqis[i]) ? aqis[i] : null;
+
+    if (standard === 'CPCB_AQI' && (p25 !== null || p10 !== null)) {
+      const h25 = p25 !== null ? calculateCPCBSubIndexPM25(p25) : null;
+      const h10 = p10 !== null ? calculateCPCBSubIndexPM10(p10) : null;
+      ptAqi = h25 !== null && h10 !== null ? Math.max(h25, h10) : (h25 ?? h10);
+    } else if (ptAqi === null && p25 !== null) {
+      ptAqi = calculateUSEPASubIndexPM25(p25);
+    }
+
+    const classification = classifyAQI(ptAqi, standard);
+    points.push({
+      time: parseUtcTimestamp(times[i]),
+      aqi: ptAqi !== null ? Math.round(ptAqi) : null,
+      pm2_5: p25 !== null ? Number(p25.toFixed(1)) : null,
+      pm10: p10 !== null ? Number(p10.toFixed(1)) : null,
+      category: classification.category
+    });
+  }
+  return points;
+}
+
+async function fetchJsonWithTimeout(url: string, timeoutMs: number): Promise<unknown> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'AirWise-AI/1.0 (Environmental-Health-Assistant)'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    return await response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export class OpenMeteoProvider implements AirQualityProvider {
@@ -88,46 +193,24 @@ export class OpenMeteoProvider implements AirQualityProvider {
     // Request UTC/GMT explicitly so server timezone never shifts observedAt or forecast windows
     url.searchParams.set('timezone', 'GMT');
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-
-    let rawData: OpenMeteoResponse;
+    let payload: unknown;
     try {
-      const response = await fetch(url.toString(), {
-        signal: controller.signal,
-        headers: {
-          Accept: 'application/json',
-          'User-Agent': 'AirWise-AI/1.0 (Environmental-Health-Assistant)'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Open-Meteo returned HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      rawData = (await response.json()) as OpenMeteoResponse;
+      payload = await fetchJsonWithTimeout(url.toString(), 8000);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       throw new Error(`Failed to fetch environmental data from Open-Meteo: ${message}`);
-    } finally {
-      clearTimeout(timeout);
     }
 
+    const rawData = (typeof payload === 'object' && payload !== null ? payload : {}) as OpenMeteoResponse;
     const current = rawData.current;
-    if (!current) {
+    if (!current || typeof current !== 'object') {
       throw new Error('Open-Meteo response did not contain current observations.');
     }
 
     const missingPollutants: string[] = [];
-
-    // Open-Meteo reports carbon monoxide in µg/m³; convert to mg/m³ for standard health reference
+    // Convert CO from µg/m³ to mg/m³ for standard WHO reference comparison
     let coValue: number | null = null;
-    if (
-      current.carbon_monoxide !== undefined &&
-      current.carbon_monoxide !== null &&
-      Number.isFinite(current.carbon_monoxide) &&
-      current.carbon_monoxide >= 0
-    ) {
+    if (isValidNonNegative(current.carbon_monoxide)) {
       coValue = Number((current.carbon_monoxide / 1000).toFixed(2));
     } else {
       missingPollutants.push('CO');
@@ -142,91 +225,12 @@ export class OpenMeteoProvider implements AirQualityProvider {
       co: coValue
     };
 
-    const isIndia = isIndiaLocation(coords);
-    let standard: AQIStandard = 'US_AQI';
-    let aqiValue: number | null = null;
-    let dominantPollutant: string | null = pollutants.pm2_5 !== null ? 'PM2.5' : null;
-    let standardNotes = 'US EPA Air Quality Index scale standard.';
-
-    if (isIndia && (pollutants.pm2_5 !== null || pollutants.pm10 !== null)) {
-      standard = 'CPCB_AQI';
-      const pm25Sub = pollutants.pm2_5 !== null ? calculateCPCBSubIndexPM25(pollutants.pm2_5) : null;
-      const pm10Sub = pollutants.pm10 !== null ? calculateCPCBSubIndexPM10(pollutants.pm10) : null;
-
-      if (pm25Sub !== null && pm10Sub !== null) {
-        if (pm25Sub >= pm10Sub) {
-          aqiValue = pm25Sub;
-          dominantPollutant = 'PM2.5';
-        } else {
-          aqiValue = pm10Sub;
-          dominantPollutant = 'PM10';
-        }
-      } else {
-        aqiValue = pm25Sub ?? pm10Sub;
-        dominantPollutant = pm25Sub !== null ? 'PM2.5' : 'PM10';
-      }
-      standardNotes =
-        'Indian CPCB NAQI standard applied. Calculated from validated particulate concentration breakpoints (PM2.5 & PM10).';
-    } else {
-      const rawUsAqi = current.us_aqi;
-      aqiValue =
-        rawUsAqi !== undefined && rawUsAqi !== null && Number.isFinite(rawUsAqi) && rawUsAqi >= 0
-          ? rawUsAqi
-          : null;
-      if (aqiValue === null && pollutants.pm2_5 !== null) {
-        aqiValue = calculateUSEPASubIndexPM25(pollutants.pm2_5);
-      }
-    }
-
+    const { standard, aqiValue, dominantPollutant, standardNotes } = computeRegionalAQI(
+      coords,
+      pollutants,
+      current.us_aqi
+    );
     const { category, label, healthImplications } = classifyAQI(aqiValue, standard);
-
-    const hourlyPoints: HourlyForecastPoint[] = [];
-    if (rawData.hourly && Array.isArray(rawData.hourly.time)) {
-      const times = rawData.hourly.time;
-      const pm25s = rawData.hourly.pm2_5 || [];
-      const pm10s = rawData.hourly.pm10 || [];
-      const aqis = rawData.hourly.us_aqi || [];
-
-      const nowHourUtc = new Date().toISOString().substring(0, 13);
-      let startIndex = times.findIndex(t => t >= nowHourUtc);
-      if (startIndex < 0) startIndex = 0;
-
-      for (let i = startIndex; i < Math.min(times.length, startIndex + 24); i++) {
-        const rawTime = times[i];
-        const p25 =
-          pm25s[i] !== undefined && pm25s[i] !== null && Number.isFinite(pm25s[i]) && (pm25s[i] as number) >= 0
-            ? (pm25s[i] as number)
-            : null;
-        const p10 =
-          pm10s[i] !== undefined && pm10s[i] !== null && Number.isFinite(pm10s[i]) && (pm10s[i] as number) >= 0
-            ? (pm10s[i] as number)
-            : null;
-        let ptAqi =
-          aqis[i] !== undefined && aqis[i] !== null && Number.isFinite(aqis[i]) && (aqis[i] as number) >= 0
-            ? (aqis[i] as number)
-            : null;
-
-        if (standard === 'CPCB_AQI' && (p25 !== null || p10 !== null)) {
-          const h25 = p25 !== null ? calculateCPCBSubIndexPM25(p25) : null;
-          const h10 = p10 !== null ? calculateCPCBSubIndexPM10(p10) : null;
-          ptAqi = h25 !== null && h10 !== null ? Math.max(h25, h10) : (h25 ?? h10);
-        } else if (ptAqi === null && p25 !== null) {
-          ptAqi = calculateUSEPASubIndexPM25(p25);
-        }
-
-        const ptClassification = classifyAQI(ptAqi, standard);
-
-        hourlyPoints.push({
-          time: parseUtcTimestamp(rawTime),
-          aqi: ptAqi !== null ? Math.round(ptAqi) : null,
-          pm2_5: p25 !== null ? Number(p25.toFixed(1)) : null,
-          pm10: p10 !== null ? Number(p10.toFixed(1)) : null,
-          category: ptClassification.category
-        });
-      }
-    }
-
-    const observedAt = parseUtcTimestamp(current.time);
 
     return {
       location: coords,
@@ -237,9 +241,9 @@ export class OpenMeteoProvider implements AirQualityProvider {
       indexStandard: standard,
       dominantPollutant,
       pollutants,
-      hourlyForecast: hourlyPoints,
+      hourlyForecast: buildHourlyForecast(rawData.hourly, standard),
       provider: this.name,
-      observedAt,
+      observedAt: parseUtcTimestamp(current.time),
       fetchedAt: new Date().toISOString(),
       isStale: false,
       isDemo: false,
@@ -254,7 +258,7 @@ export class OpenMeteoProvider implements AirQualityProvider {
 
   public async searchLocations(query: string): Promise<LocationCoordinates[]> {
     const trimmed = query.trim();
-    if (!trimmed || trimmed.length < 2) {
+    if (trimmed.length < 2) {
       return [];
     }
 
@@ -264,17 +268,9 @@ export class OpenMeteoProvider implements AirQualityProvider {
     url.searchParams.set('language', 'en');
     url.searchParams.set('format', 'json');
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 6000);
-
     try {
-      const response = await fetch(url.toString(), { signal: controller.signal });
-      if (!response.ok) {
-        return [];
-      }
-
-      const data = (await response.json()) as { results?: GeocodingResult[] };
-      if (!data.results || !Array.isArray(data.results)) {
+      const data = (await fetchJsonWithTimeout(url.toString(), 6000)) as { results?: GeocodingResult[] } | null;
+      if (!data || !Array.isArray(data.results)) {
         return [];
       }
 
@@ -286,10 +282,9 @@ export class OpenMeteoProvider implements AirQualityProvider {
         country: r.country,
         timezone: r.timezone
       }));
-    } catch {
+    } catch (err: unknown) {
+      console.warn('Geocoding lookup failed, returning empty location list:', err);
       return [];
-    } finally {
-      clearTimeout(timeout);
     }
   }
 }

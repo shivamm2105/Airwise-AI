@@ -15,22 +15,22 @@ export function getSavedActions(_req: Request, res: Response, next: NextFunction
   }
 }
 
-export function saveAction(req: Request, res: Response, next: NextFunction): void {
+export async function saveAction(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const input = SavedActionInputSchema.parse(req.body);
-    const saved = storageService.saveAction(input);
+    const saved = await storageService.saveAction(input);
     res.status(201).json(saved);
   } catch (err) {
     next(err);
   }
 }
 
-export function toggleActionCompletion(req: Request, res: Response, next: NextFunction): void {
+export async function toggleActionCompletion(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id } = SavedActionIdParamSchema.parse(req.params);
-    const updated = storageService.toggleActionCompletion(id);
+    const updated = await storageService.toggleActionCompletion(id);
     if (!updated) {
-      res.status(404).json({ error: 'Not Found', message: `No saved action found with id ${id}` });
+      res.status(404).json({ error: 'Not Found', message: 'Saved action not found.' });
       return;
     }
     res.json(updated);
@@ -39,12 +39,12 @@ export function toggleActionCompletion(req: Request, res: Response, next: NextFu
   }
 }
 
-export function deleteAction(req: Request, res: Response, next: NextFunction): void {
+export async function deleteAction(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id } = SavedActionIdParamSchema.parse(req.params);
-    const success = storageService.deleteSavedAction(id);
+    const success = await storageService.deleteSavedAction(id);
     if (!success) {
-      res.status(404).json({ error: 'Not Found', message: `No saved action found with id ${id}` });
+      res.status(404).json({ error: 'Not Found', message: 'Saved action not found.' });
       return;
     }
     res.json({ success: true, message: 'Action removed successfully' });
@@ -53,9 +53,9 @@ export function deleteAction(req: Request, res: Response, next: NextFunction): v
   }
 }
 
-export function clearAllActions(_req: Request, res: Response, next: NextFunction): void {
+export async function clearAllActions(_req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    storageService.clearAllActions();
+    await storageService.clearAllActions();
     res.json({ success: true, message: 'All saved actions cleared successfully' });
   } catch (err) {
     next(err);
@@ -95,13 +95,12 @@ export function getPreferences(_req: Request, res: Response, next: NextFunction)
   }
 }
 
-export function updatePreferences(req: Request, res: Response, next: NextFunction): void {
+export async function updatePreferences(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const prefs = HouseholdPreferencesSchema.parse(req.body);
-    storageService.savePreferences(prefs);
+    await storageService.savePreferences(prefs);
     res.json({ success: true, preferences: prefs });
   } catch (err) {
     next(err);
   }
 }
-

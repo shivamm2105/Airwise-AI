@@ -18,16 +18,12 @@ interface DashboardPageProps {
 }
 
 const formatTimestamp = (isoStr: string): string => {
-  try {
-    const d = new Date(isoStr);
-    if (Number.isNaN(d.getTime())) return isoStr;
-    return d.toLocaleString([], {
-      dateStyle: 'medium',
-      timeStyle: 'short'
-    });
-  } catch {
-    return isoStr;
-  }
+  const d = new Date(isoStr);
+  if (Number.isNaN(d.getTime())) return isoStr;
+  return d.toLocaleString([], {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  });
 };
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({

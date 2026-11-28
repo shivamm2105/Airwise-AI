@@ -3,17 +3,8 @@ import { AirQualityData, HouseholdPreferences } from '@shared/types';
 import { mergeHouseholdPreferences } from '@shared/preferences';
 import { api } from '../services/api';
 import { InlineFeedbackBanner } from '../components/InlineFeedbackBanner';
-import {
-  Users,
-  Share2,
-  GraduationCap,
-  Sparkles,
-  Check,
-  Heart,
-  Save,
-  Copy,
-  Info
-} from 'lucide-react';
+import { CommunityBriefingCard } from '../components/CommunityBriefingCard';
+import { Users, GraduationCap, Sparkles, Check, Heart, Save, Info } from 'lucide-react';
 
 interface FamilyCommunityPageProps {
   airQuality: AirQualityData | null;
@@ -21,12 +12,37 @@ interface FamilyCommunityPageProps {
   onUpdatePreferences: (prefs: HouseholdPreferences) => void;
 }
 
+const COMMUTE_MODES: readonly HouseholdPreferences['commuteMode'][] = [
+  'public_transit',
+  'car_alone',
+  'carpool',
+  'bicycle',
+  'walk',
+  'electric_vehicle',
+  'work_from_home'
+];
+
+const SUSTAINABILITY_GOALS: readonly HouseholdPreferences['sustainabilityFocus'][] = [
+  'exposure_reduction',
+  'transport',
+  'household_energy',
+  'community',
+  'general'
+];
+
+function isCommuteMode(value: string): value is HouseholdPreferences['commuteMode'] {
+  return (COMMUTE_MODES as readonly string[]).includes(value);
+}
+
+function isSustainabilityFocus(value: string): value is HouseholdPreferences['sustainabilityFocus'] {
+  return (SUSTAINABILITY_GOALS as readonly string[]).includes(value);
+}
+
 export const FamilyCommunityPage: React.FC<FamilyCommunityPageProps> = ({
   airQuality,
   preferences,
   onUpdatePreferences
 }) => {
-  const [copied, setCopied] = useState(false);
   const [feedback, setFeedback] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
 
   const [householdSize, setHouseholdSize] = useState<number>(preferences?.householdSize ?? 3);
@@ -45,7 +61,6 @@ export const FamilyCommunityPage: React.FC<FamilyCommunityPageProps> = ({
     preferences?.sustainabilityFocus ?? 'general'
   );
 
-  // Sync form state whenever asynchronous preferences arrive
   useEffect(() => {
     if (!preferences) return;
     setHouseholdSize(preferences.householdSize);
@@ -78,37 +93,6 @@ export const FamilyCommunityPage: React.FC<FamilyCommunityPageProps> = ({
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unable to save preferences right now.';
       setFeedback({ variant: 'error', message: msg });
-    }
-  };
-
-  const generateShareableText = () => {
-    const loc = airQuality?.location.name || 'Our City';
-    const aqi = airQuality?.aqi ?? 'N/A';
-    const standard = airQuality?.indexStandard || 'Standard';
-    const cat = airQuality?.categoryLabel || 'Moderate';
-
-    return `🌫️ AirWise AI Community Briefing for ${loc}:
-• Status: ${cat} (AQI ${aqi} [${standard}])
-• Key Advice: ${aqi !== 'N/A' && Number(aqi) > 150
-        ? 'Hazardous outdoor air. Move children play & workouts indoors. Wear N95 respirators outdoors.'
-        : 'Satisfactory air quality. Maintain good ventilation and choose low-emission commuting.'
-      }
-• Community Tip: Avoid vehicle engine idling outside schools and report unauthorized open biomass burning.
-— Generated via AirWise AI (Evidence-Grounded Environmental Intelligence)`;
-  };
-
-  const handleCopyShareable = async () => {
-    const text = generateShareableText();
-    try {
-      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-        await navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 3000);
-      } else {
-        setFeedback({ variant: 'error', message: 'Clipboard copy is not supported in this environment.' });
-      }
-    } catch {
-      setFeedback({ variant: 'error', message: 'Unable to access clipboard permissions.' });
     }
   };
 
@@ -240,7 +224,9 @@ export const FamilyCommunityPage: React.FC<FamilyCommunityPageProps> = ({
               id="commute-mode-select"
               aria-label="Primary Commute Mode"
               value={commuteMode}
-              onChange={e => setCommuteMode(e.target.value as HouseholdPreferences['commuteMode'])}
+              onChange={e => {
+                if (isCommuteMode(e.target.value)) setCommuteMode(e.target.value);
+              }}
               className="w-full p-2.5 rounded-lg bg-navy-800 border border-slate-700 text-white text-xs focus:border-purple-500"
             >
               <option value="public_transit">Public Transit (Metro / Bus)</option>
@@ -282,7 +268,9 @@ export const FamilyCommunityPage: React.FC<FamilyCommunityPageProps> = ({
               id="sustainability-focus-select"
               aria-label="Primary Sustainability Goal"
               value={sustainabilityFocus}
-              onChange={e => setSustainabilityFocus(e.target.value as HouseholdPreferences['sustainabilityFocus'])}
+              onChange={e => {
+                if (isSustainabilityFocus(e.target.value)) setSustainabilityFocus(e.target.value);
+              }}
               className="w-full p-2.5 rounded-lg bg-navy-800 border border-slate-700 text-white text-xs focus:border-purple-500"
             >
               <option value="exposure_reduction">Personal Exposure Shielding</option>
@@ -306,43 +294,10 @@ export const FamilyCommunityPage: React.FC<FamilyCommunityPageProps> = ({
       </form>
 
       {/* Shareable Community Air Quality Briefing */}
-      <div className="bg-navy-800/80 border border-slate-700/80 rounded-2xl p-6 shadow-xl space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-700/80">
-          <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">
-              Community Outreach
-            </span>
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <Share2 className="w-4 h-4 text-purple-400" aria-hidden="true" />
-              <span>Shareable Privacy-Safe Air Quality Card</span>
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={handleCopyShareable}
-            className="px-4 py-2 rounded-xl bg-purple-950/80 hover:bg-purple-900 border border-purple-500/40 text-purple-300 font-semibold text-xs flex items-center gap-1.5 transition-colors self-start sm:self-center"
-          >
-            {copied ? (
-              <>
-                <Check className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
-                <span>Copied to Clipboard!</span>
-              </>
-            ) : (
-              <>
-                <Copy className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Copy Text Briefing</span>
-              </>
-            )}
-          </button>
-        </div>
-
-        <div className="p-4 rounded-xl bg-navy-900/90 border border-slate-800 text-xs font-mono text-slate-200 whitespace-pre-line leading-relaxed shadow-inner">
-          {generateShareableText()}
-        </div>
-        <p className="text-[11px] text-slate-400">
-          Privacy note: This briefing shares the city name and verified AQI, without revealing your precise home street or GPS coordinates. Perfect for parent WhatsApp groups, resident associations, and neighborhood noticeboards.
-        </p>
-      </div>
+      <CommunityBriefingCard
+        airQuality={airQuality}
+        onErrorFeedback={message => setFeedback({ variant: 'error', message })}
+      />
 
       {/* School & Neighborhood Habit Challenges */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs">

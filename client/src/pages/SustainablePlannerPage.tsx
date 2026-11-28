@@ -55,7 +55,8 @@ export const SustainablePlannerPage: React.FC<SustainablePlannerPageProps> = ({ 
         setImpactResult(res);
       } catch (err: unknown) {
         if (!isAbortError(err)) {
-          console.warn('Calculation error:', err);
+          const msg = err instanceof Error ? err.message : 'Unable to calculate commute emissions right now.';
+          setSaveFeedback({ variant: 'error', message: msg });
         }
       }
     }, 200);

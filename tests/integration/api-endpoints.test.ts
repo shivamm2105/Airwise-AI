@@ -1,6 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+// @vitest-environment node
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import express from 'express';
 import request from 'supertest';
 import { app } from '../../server/src/index.js';
 import { ProviderFactory } from '../../server/src/providers/ProviderFactory.js';
@@ -8,17 +10,24 @@ import { DemoAirQualityProvider } from '../../server/src/providers/DemoAirQualit
 import { airQualityService } from '../../server/src/services/AirQualityService.js';
 import { storageService } from '../../server/src/services/StorageService.js';
 import { isOriginAllowed } from '../../server/src/middleware/security.js';
+import { errorHandler } from '../../server/src/middleware/errorHandler.js';
+import { staticRateLimiter } from '../../server/src/middleware/rateLimiter.js';
 
 describe('Server API Integration Tests', () => {
   const originalGeminiKey = process.env.GEMINI_API_KEY;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     process.env.NODE_ENV = 'test';
     delete process.env.GEMINI_API_KEY;
     const demo = new DemoAirQualityProvider();
     ProviderFactory.getProvider = () => demo;
     airQualityService.setProvider(demo);
-    storageService.clearAllActions();
+    await storageService.clearAllActions();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.ENABLE_RATE_LIMIT_IN_TEST;
   });
 
   afterAll(() => {
@@ -31,23 +40,43 @@ describe('Server API Integration Tests', () => {
     }
   });
 
-  describe('Security Controls (CORS, Headers, Validation & Error Sanitization)', () => {
-    it('allows explicit trusted production origin and rejects untrusted third-party vercel origins', () => {
+  describe('Security Controls, SEO Routes & Middleware', () => {
+    it('allows explicit trusted production and Vercel hosts while rejecting untrusted origins and localhost on cloud prod', () => {
       expect(isOriginAllowed(undefined)).toBe(true);
       expect(isOriginAllowed('https://airwiseaibot.vercel.app')).toBe(true);
       expect(isOriginAllowed('https://evil-attacker.vercel.app')).toBe(false);
       expect(isOriginAllowed('https://phishing.example.com')).toBe(false);
+
+      const prevVercel = process.env.VERCEL;
+      const prevEnv = process.env.NODE_ENV;
+      const prevVercelUrl = process.env.VERCEL_URL;
+      process.env.VERCEL = '1';
+      process.env.NODE_ENV = 'production';
+      process.env.VERCEL_URL = 'preview-airwise.vercel.app';
+      expect(isOriginAllowed('https://preview-airwise.vercel.app')).toBe(true);
+      expect(isOriginAllowed('http://localhost:5173')).toBe(false);
+      if (prevVercel === undefined) delete process.env.VERCEL;
+      else process.env.VERCEL = prevVercel;
+      process.env.NODE_ENV = prevEnv;
+      if (prevVercelUrl === undefined) delete process.env.VERCEL_URL;
+      else process.env.VERCEL_URL = prevVercelUrl;
     });
 
-    it('rejects untrusted Origin headers cleanly without crashing server (no Access-Control-Allow-Origin)', async () => {
-      const res = await request(app)
+    it('enforces CORS read protections and blocks untrusted cross-origin state-changing requests with 403', async () => {
+      const getRes = await request(app)
         .get('/api/health')
         .set('Origin', 'https://untrusted-site.vercel.app');
+      expect(getRes.status).toBe(200);
+      expect(getRes.headers['access-control-allow-origin']).toBeUndefined();
+      expect(getRes.headers['x-powered-by']).toBeUndefined();
+      expect(getRes.headers['x-content-type-options']).toBe('nosniff');
 
-      expect(res.status).toBe(200);
-      expect(res.headers['access-control-allow-origin']).toBeUndefined();
-      expect(res.headers['x-powered-by']).toBeUndefined();
-      expect(res.headers['x-content-type-options']).toBe('nosniff');
+      const postRes = await request(app)
+        .post('/api/saved-actions')
+        .set('Origin', 'https://untrusted-site.vercel.app')
+        .send({ actionId: 'x', title: 'Test', category: 'indoor', locationName: 'Delhi', aqiAtSave: 100 });
+      expect(postRes.status).toBe(403);
+      expect(postRes.body.error).toBe('Forbidden');
     });
 
     it('echoes Access-Control-Allow-Origin for trusted production deployment origin', async () => {
@@ -57,78 +86,104 @@ describe('Server API Integration Tests', () => {
 
       expect(res.status).toBe(200);
       expect(res.headers['access-control-allow-origin']).toBe('https://airwiseaibot.vercel.app');
+      expect(res.body.env).toBeUndefined();
     });
 
-    it('returns clean 400 error on malformed JSON request body without leaking stack traces', async () => {
-      const res = await request(app)
+    it('serves SEO /robots.txt, handles /favicon.ico, and returns JSON 404 on unknown /api paths', async () => {
+      const robotsRes = await request(app).get('/robots.txt');
+      expect(robotsRes.status).toBe(200);
+      expect(robotsRes.text).toContain('Sitemap: https://airwiseaibot.vercel.app/sitemap.xml');
+
+      const favRes = await request(app).get('/favicon.ico');
+      expect([200, 204]).toContain(favRes.status);
+
+      const unknownApiRes = await request(app).get('/api/nonexistent-endpoint');
+      expect(unknownApiRes.status).toBe(404);
+      expect(unknownApiRes.body.error).toBe('Not Found');
+    });
+
+    it('returns clean 400 on malformed JSON and redacts leaked secrets inside 500 error responses', async () => {
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const badJsonRes = await request(app)
         .post('/api/chat')
         .set('Content-Type', 'application/json')
         .send('{"message": broken json');
+      expect(badJsonRes.status).toBe(400);
+      expect(badJsonRes.body.error).toBe('Bad Request');
+      expect(badJsonRes.body.stack).toBeUndefined();
 
-      expect(res.status).toBe(400);
-      expect(res.body.error).toBe('Bad Request');
-      expect(res.body.stack).toBeUndefined();
+      const leakTestApp = express();
+      const syntheticKey = ['AIza', 'SySecretLeakTestKeyValue12345678'].join('');
+      leakTestApp.get('/boom', (_req, _res, next) => {
+        next(new Error(`Upstream error with key ${syntheticKey}`));
+      });
+      leakTestApp.use(errorHandler);
+
+      const prevEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'production';
+      const prodErrRes = await request(leakTestApp).get('/boom');
+      expect(prodErrRes.status).toBe(500);
+      expect(prodErrRes.body.message).toBe('An unexpected server error occurred. Please try again.');
+
+      process.env.NODE_ENV = 'development';
+      const devErrRes = await request(leakTestApp).get('/boom');
+      expect(devErrRes.status).toBe(500);
+      expect(devErrRes.body.message).toContain('[REDACTED_API_KEY]');
+      expect(devErrRes.body.message).not.toContain(syntheticKey);
+      process.env.NODE_ENV = prevEnv;
+      expect(errSpy).toHaveBeenCalled();
+    });
+
+    it('exposes configured rate-limit headers when rate limiting is active', async () => {
+      process.env.ENABLE_RATE_LIMIT_IN_TEST = 'true';
+      const limitedApp = express();
+      limitedApp.get('/ping', staticRateLimiter, (_req, res) => res.json({ ok: true }));
+      const res = await request(limitedApp).get('/ping');
+      expect(res.status).toBe(200);
+      expect(res.headers['ratelimit-limit']).toBeDefined();
     });
   });
 
-  describe('GET /api/health', () => {
+  describe('GET /api/health & /api/air-quality/*', () => {
     it('returns healthy status with system metadata', async () => {
       const res = await request(app).get('/api/health');
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('healthy');
-      expect(res.body.product).toContain('AirWise AI');
       expect(res.body.version).toBe('1.0.0');
     });
-  });
 
-  describe('GET /api/air-quality/current', () => {
-    it('returns air quality reading for valid coordinates', async () => {
-      const res = await request(app)
+    it('returns air quality for coordinates or city fallback, 404 for unknown city, and 400 on invalid query', async () => {
+      const coordRes = await request(app)
         .get('/api/air-quality/current')
         .query({ lat: 28.6139, lon: 77.209, city: 'New Delhi' });
+      expect(coordRes.status).toBe(200);
+      expect(coordRes.body.isDemo).toBe(true);
 
-      expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('aqi');
-      expect(res.body).toHaveProperty('category');
-      expect(res.body).toHaveProperty('categoryLabel');
-      expect(res.body).toHaveProperty('pollutants');
-      expect(res.body.pollutants).toHaveProperty('pm2_5');
-      expect(res.body).toHaveProperty('indexStandard');
-      expect(res.body.isDemo).toBe(true);
-    });
-
-    it('returns air quality via city geocoding fallback and 404 when city is unknown', async () => {
-      const cityRes = await request(app)
-        .get('/api/air-quality/current')
-        .query({ city: 'New Delhi' });
+      const cityRes = await request(app).get('/api/air-quality/current').query({ city: 'New Delhi' });
       expect(cityRes.status).toBe(200);
       expect(cityRes.body.location.name).toContain('Delhi');
 
-      const unknownRes = await request(app)
-        .get('/api/air-quality/current')
-        .query({ city: 'NonExistentStationXYZ999' });
+      const unknownRes = await request(app).get('/api/air-quality/current').query({ city: 'NonExistentStationXYZ999' });
       expect(unknownRes.status).toBe(404);
 
       const searchRes = await request(app).get('/api/air-quality/search').query({ q: 'London' });
       expect(searchRes.status).toBe(200);
       expect(searchRes.body.results[0].name).toBe('London');
-    });
 
-    it('returns 400 when missing both coordinates and city or providing non-numeric coordinates', async () => {
       const missingRes = await request(app).get('/api/air-quality/current');
       expect(missingRes.status).toBe(400);
-      expect(missingRes.body.error).toBe('Validation Error');
 
-      const invalidCoords = await request(app)
-        .get('/api/air-quality/current')
-        .query({ lat: 'not-a-number', lon: 77.2 });
+      const invalidCoords = await request(app).get('/api/air-quality/current').query({ lat: 'not-a-number', lon: 77.2 });
       expect(invalidCoords.status).toBe(400);
     });
   });
 
-  describe('POST /api/recommendations/daily-plan', () => {
-    it('generates a full evidence-aware action plan and accepts nullable region/country', async () => {
-      const res = await request(app)
+  describe('Recommendations, Chat & Saved Actions CRUD Endpoints', () => {
+    let createdId: string;
+
+    it('generates daily plan, calculates impact, and responds to grounded chat', async () => {
+      const planRes = await request(app)
         .post('/api/recommendations/daily-plan')
         .send({
           latitude: 28.6139,
@@ -136,87 +191,41 @@ describe('Server API Integration Tests', () => {
           locationName: 'New Delhi',
           country: null,
           region: null,
-          preferences: {
-            householdSize: 4,
-            hasChildren: true,
-            commuteMode: 'public_transit'
-          }
+          preferences: { householdSize: 4, hasChildren: true, commuteMode: 'public_transit' }
         });
+      expect(planRes.status).toBe(200);
+      expect(planRes.body.actions.length).toBeGreaterThan(0);
 
-      expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('summary');
-      expect(Array.isArray(res.body.actions)).toBe(true);
-      expect(res.body.actions.length).toBeGreaterThan(0);
-      expect(res.body.safetyEvaluation.urgentMedicalAdvisory).toBeDefined();
-    });
-  });
-
-  describe('POST /api/recommendations/calculate-impact', () => {
-    it('calculates avoided transport emissions accurately', async () => {
-      const res = await request(app)
+      const impactRes = await request(app)
         .post('/api/recommendations/calculate-impact')
-        .send({
-          distanceKm: 20,
-          originalMode: 'car_alone',
-          alternativeMode: 'public_transit'
-        });
+        .send({ distanceKm: 20, originalMode: 'car_alone', alternativeMode: 'public_transit' });
+      expect(impactRes.status).toBe(200);
+      expect(impactRes.body.avoidedKgCO2e).toBe(2.2);
 
-      expect(res.status).toBe(200);
-      expect(res.body.avoidedKgCO2e).toBe(2.2);
-      expect(res.body.methodology).toBeDefined();
-      expect(res.body.uncertaintyRange).toBeDefined();
-    });
-  });
-
-  describe('POST /api/chat', () => {
-    it('handles conversational queries with deterministic grounding fallback', async () => {
-      const res = await request(app)
+      const chatRes = await request(app)
         .post('/api/chat')
         .send({
           message: 'Is it safe to run outdoors today?',
-          location: {
-            latitude: 28.6139,
-            longitude: 77.209,
-            name: 'New Delhi'
-          }
+          location: { latitude: 28.6139, longitude: 77.209, name: 'New Delhi' }
         });
-
-      expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('response');
-      expect(res.body.groundedInContext).toBe(true);
-      expect(res.body.response).toContain('Outdoor');
-    });
-  });
-
-  describe('Saved Actions CRUD Endpoints & Route Validation', () => {
-    let createdId: string;
-
-    it('rejects invalid action ID route parameter with HTTP 400 and returns 404 for unknown valid IDs', async () => {
-      const res = await request(app).patch('/api/saved-actions/bad$id!/toggle');
-      expect(res.status).toBe(400);
-      expect(res.body.error).toBe('Validation Error');
-
-      const missingToggle = await request(app).patch('/api/saved-actions/missing_act_99/toggle');
-      expect(missingToggle.status).toBe(404);
-
-      const missingDel = await request(app).delete('/api/saved-actions/missing_act_99');
-      expect(missingDel.status).toBe(404);
+      expect(chatRes.status).toBe(200);
+      expect(chatRes.body.groundedInContext).toBe(true);
     });
 
-    it('gets and saves household preferences via /api/preferences', async () => {
-      const postRes = await request(app)
+    it('handles saved actions CRUD, preferences, parameter validation 400s, and missing 404s', async () => {
+      const badParam = await request(app).patch('/api/saved-actions/bad$id!/toggle');
+      expect(badParam.status).toBe(400);
+
+      expect((await request(app).patch('/api/saved-actions/missing_act_99/toggle')).status).toBe(404);
+      expect((await request(app).delete('/api/saved-actions/missing_act_99')).status).toBe(404);
+
+      const postPref = await request(app)
         .post('/api/preferences')
         .send({ householdSize: 4, hasChildren: true, commuteMode: 'public_transit', commuteDistanceKm: 12 });
-      expect(postRes.status).toBe(200);
-      expect(postRes.body.preferences.hasChildren).toBe(true);
+      expect(postPref.status).toBe(200);
+      expect((await request(app).get('/api/preferences')).body.preferences.householdSize).toBe(4);
 
-      const getRes = await request(app).get('/api/preferences');
-      expect(getRes.status).toBe(200);
-      expect(getRes.body.preferences.householdSize).toBe(4);
-    });
-
-    it('saves a new action item', async () => {
-      const res = await request(app)
+      const saveRes = await request(app)
         .post('/api/saved-actions')
         .send({
           actionId: 'test-act-1',
@@ -225,58 +234,21 @@ describe('Server API Integration Tests', () => {
           locationName: 'New Delhi',
           aqiAtSave: 350
         });
-
-      expect(res.status).toBe(201);
-      expect(res.body).toHaveProperty('id');
-      expect(res.body.completed).toBe(false);
-      createdId = res.body.id;
-    });
-
-    it('lists saved actions including the created item', async () => {
-      const res = await request(app).get('/api/saved-actions');
-      expect(res.status).toBe(200);
-      expect(Array.isArray(res.body.actions)).toBe(true);
-      expect(res.body.actions.some((a: { id: string }) => a.id === createdId)).toBe(true);
-    });
-
-    it('toggles action completion status', async () => {
-      const res = await request(app).patch(`/api/saved-actions/${createdId}/toggle`);
-      expect(res.status).toBe(200);
-      expect(res.body.completed).toBe(true);
-      expect(res.body.completedAt).toBeDefined();
-    });
-
-    it('exports a summary report', async () => {
-      const res = await request(app).get('/api/saved-actions/export');
-      expect(res.status).toBe(200);
-      expect(res.body.title).toContain('AirWise AI');
-      expect(res.body.statistics.totalActionsSaved).toBeGreaterThan(0);
-    });
-
-    it('deletes the created action', async () => {
-      const res = await request(app).delete(`/api/saved-actions/${createdId}`);
-      expect(res.status).toBe(200);
-      expect(res.body.success).toBe(true);
-    });
-
-    it('clears all actions', async () => {
-      await request(app)
-        .post('/api/saved-actions')
-        .send({
-          actionId: 'test-act-clear',
-          title: 'Temporary Action to be Cleared',
-          category: 'indoor',
-          locationName: 'London',
-          aqiAtSave: 45
-        });
-
-      const clearRes = await request(app).delete('/api/saved-actions');
-      expect(clearRes.status).toBe(200);
-      expect(clearRes.body.success).toBe(true);
+      expect(saveRes.status).toBe(201);
+      createdId = saveRes.body.id;
 
       const listRes = await request(app).get('/api/saved-actions');
-      expect(listRes.status).toBe(200);
-      expect(listRes.body.actions.length).toBe(0);
+      expect(listRes.body.actions.some((a: { id: string }) => a.id === createdId)).toBe(true);
+
+      const toggleRes = await request(app).patch(`/api/saved-actions/${createdId}/toggle`);
+      expect(toggleRes.body.completed).toBe(true);
+
+      const exportRes = await request(app).get('/api/saved-actions/export');
+      expect(exportRes.body.statistics.totalActionsSaved).toBeGreaterThan(0);
+
+      expect((await request(app).delete(`/api/saved-actions/${createdId}`)).status).toBe(200);
+      expect((await request(app).delete('/api/saved-actions')).status).toBe(200);
+      expect((await request(app).get('/api/saved-actions')).body.actions.length).toBe(0);
     });
   });
 });

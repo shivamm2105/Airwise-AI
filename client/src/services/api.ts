@@ -25,6 +25,19 @@ export function isAbortError(err: unknown): boolean {
   return err instanceof DOMException && err.name === 'AbortError';
 }
 
+function extractErrorMessage(data: unknown, status: number): string {
+  if (typeof data === 'object' && data !== null) {
+    const record = data as Record<string, unknown>;
+    if (typeof record.message === 'string' && record.message.trim()) {
+      return record.message;
+    }
+    if (typeof record.error === 'string' && record.error.trim()) {
+      return record.error;
+    }
+  }
+  return `Request failed with status ${status}`;
+}
+
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const headers = {
     'Content-Type': 'application/json',
@@ -37,11 +50,15 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       headers
     });
 
-    const data = await res.json().catch(() => null);
+    let data: unknown = null;
+    try {
+      data = await res.json();
+    } catch {
+      data = null;
+    }
 
     if (!res.ok) {
-      const msg = data?.message || data?.error || `Request failed with status ${res.status}`;
-      throw new ApiError(msg, res.status);
+      throw new ApiError(extractErrorMessage(data, res.status), res.status);
     }
 
     return data as T;

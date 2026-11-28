@@ -4,7 +4,12 @@ import compression from 'compression';
 import path from 'path';
 import fs from 'fs';
 import apiRouter from './routes/api.js';
-import { helmetMiddleware, corsMiddleware } from './middleware/security.js';
+import {
+  helmetMiddleware,
+  corsMiddleware,
+  blockUntrustedCrossOriginWrites
+} from './middleware/security.js';
+import { staticRateLimiter } from './middleware/rateLimiter.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 export const app = express();
@@ -17,6 +22,7 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
 app.use(compression());
 app.use(helmetMiddleware);
 app.use(corsMiddleware);
+app.use(blockUntrustedCrossOriginWrites);
 app.use(express.json({ limit: '200kb' }));
 
 // API Routes
@@ -32,14 +38,14 @@ const staticPath = fs.existsSync(distClientPath)
   : null;
 
 // Robots.txt handler to ensure valid plain-text SEO response
-app.get('/robots.txt', (_req, res) => {
+app.get('/robots.txt', staticRateLimiter, (_req, res) => {
   res.setHeader('Content-Type', 'text/plain');
   res.setHeader('Cache-Control', 'public, max-age=86400');
   res.send('User-agent: *\nAllow: /\nSitemap: https://airwiseaibot.vercel.app/sitemap.xml\n');
 });
 
 // Favicon handler to avoid 404/MIME-type errors
-app.get('/favicon.ico', (_req, res) => {
+app.get('/favicon.ico', staticRateLimiter, (_req, res) => {
   const faviconSvgPath = staticPath ? path.join(staticPath, 'favicon.svg') : null;
   if (faviconSvgPath && fs.existsSync(faviconSvgPath)) {
     res.setHeader('Content-Type', 'image/svg+xml');
@@ -51,27 +57,27 @@ app.get('/favicon.ico', (_req, res) => {
 });
 
 if (staticPath) {
-  app.use(express.static(staticPath, {
-    maxAge: '1y',
-    immutable: true,
-    setHeaders: (res, filePath) => {
-      if (filePath.endsWith('.html')) {
-        // Never cache HTML to allow instant hot deployment updates
-        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-      } else if (filePath.endsWith('.svg') || filePath.endsWith('.webmanifest')) {
-        res.setHeader('Cache-Control', 'public, max-age=86400');
+  app.use(
+    express.static(staticPath, {
+      maxAge: '1y',
+      immutable: true,
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html')) {
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        } else if (filePath.endsWith('.svg') || filePath.endsWith('.webmanifest')) {
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+        }
       }
-    }
-  }));
-  app.get('*', (req, res, next) => {
+    })
+  );
+  app.get('*', staticRateLimiter, (req, res, next) => {
     if (req.path.startsWith('/api')) {
       return next();
     }
     res.sendFile(path.join(staticPath, 'index.html'));
   });
 } else {
-  // Informational fallback when running dev server without built assets
-  app.get('/', (_req, res) => {
+  app.get('/', staticRateLimiter, (_req, res) => {
     res.json({
       product: 'AirWise AI — Intelligent Urban Air Quality Assistant',
       status: 'API server active',
@@ -99,17 +105,12 @@ app.use('/api/*', (req, res) => {
 // Centralized Error Handler
 app.use(errorHandler);
 
-// Listen only when not running inside a test runner or serverless environment
 if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
   app.listen(PORT, () => {
-    console.log(`=======================================================`);
-    console.log(`🚀 AirWise AI Server is running on port ${PORT}`);
-    console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`🌍 Air Quality Provider: ${process.env.AIR_QUALITY_PROVIDER || 'open-meteo'}`);
-    console.log(`🤖 Gemini Model: ${process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite'} (${process.env.GEMINI_API_KEY ? 'Active' : 'Deterministic Fallback Mode'})`);
-    console.log(`=======================================================`);
+    console.log(
+      `[AirWise Server] Listening on port ${PORT} | provider=${process.env.AIR_QUALITY_PROVIDER || 'open-meteo'} | genAI=${process.env.GEMINI_API_KEY ? 'active' : 'fallback'}`
+    );
   });
 }
 
 export default app;
-

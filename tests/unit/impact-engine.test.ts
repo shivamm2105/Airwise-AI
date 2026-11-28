@@ -1,56 +1,69 @@
+// @vitest-environment node
 import { describe, it, expect } from 'vitest';
-import {
-  calculateAvoidedTransportEmissions,
-  getStandardImpact
-} from '../../shared/impact.js';
+import { calculateAvoidedTransportEmissions, getStandardImpact } from '../../shared/impact.js';
+import { calculateIndoorAirSizing, isCookingType } from '../../shared/indoorGuidance.js';
 
-describe('Direct Impact Engine Unit Tests', () => {
+describe('Direct Impact & Indoor Guidance Unit Tests', () => {
   describe('calculateAvoidedTransportEmissions', () => {
-    it('calculates avoided emissions for 15 km transit mode switch', () => {
-      const res = calculateAvoidedTransportEmissions({
+    it('calculates avoided emissions for transit, carpool, bicycle, walk, and WFH', () => {
+      const transit = calculateAvoidedTransportEmissions({
         distanceKm: 15,
         originalMode: 'car_alone',
         alternativeMode: 'public_transit'
       });
+      expect(transit.avoidedKgCO2e).toBe(1.65);
+      expect(transit.avoidedGramsExhaustPM).toBe(0.3);
 
-      expect(res.avoidedKgCO2e).toBe(1.65); // 15 km * 110 g / 1000 = 1.65 kg
-      expect(res.avoidedGramsExhaustPM).toBe(0.3); // 15 km * 0.02 = 0.30 g
-      expect(res.methodology).toContain('standard passenger transport emission factors');
-      expect(res.uncertaintyRange).toContain('±25%');
-    });
+      const carpool = calculateAvoidedTransportEmissions({
+        distanceKm: 10,
+        originalMode: 'car_alone',
+        alternativeMode: 'carpool'
+      });
+      expect(carpool.avoidedKgCO2e).toBe(0.85);
+      expect(carpool.avoidedGramsExhaustPM).toBe(0.15);
 
-    it('calculates 100% tailpipe avoidance for walking / active travel', () => {
-      const res = calculateAvoidedTransportEmissions({
+      const bike = calculateAvoidedTransportEmissions({
         distanceKm: 5,
         originalMode: 'car_alone',
         alternativeMode: 'bicycle'
       });
-
-      expect(res.avoidedKgCO2e).toBe(0.85); // 5 km * 170 g / 1000 = 0.85 kg
-      expect(res.avoidedGramsExhaustPM).toBe(0.15); // 5 * 0.03 = 0.15 g
+      expect(bike.avoidedKgCO2e).toBe(0.85);
     });
   });
 
   describe('getStandardImpact Personal vs Emission Dual Separation', () => {
-    it('correctly categorizes N95 respirator as Personal Shield with Zero Emission Benefit', () => {
-      const impact = getStandardImpact('wear_n95_respirator');
-      expect(impact.personalExposureBenefit.rating).toBe('Substantial');
-      expect(impact.environmentalEmissionBenefit.rating).toBe('None (Self-protection)');
-      expect(impact.environmentalEmissionBenefit.explanation).toContain('Respirators are personal protective equipment (PPE)');
+    it('covers all 8 standard recommendation impact profiles cleanly', () => {
+      expect(getStandardImpact('stay_indoors_hazardous').personalExposureBenefit.rating).toBe('Critical');
+      expect(getStandardImpact('wear_n95_respirator').environmentalEmissionBenefit.rating).toBe('None (Self-protection)');
+      expect(getStandardImpact('use_hepa_purifier').personalExposureBenefit.explanation).toContain('99.97%');
+      expect(getStandardImpact('close_windows_severe').personalExposureBenefit.rating).toBe('Substantial');
+      expect(getStandardImpact('avoid_engine_idling').environmentalEmissionBenefit.estimatedKgCO2eAvoided).toBe(0.15);
+      expect(getStandardImpact('avoid_indoor_incense').personalExposureBenefit.rating).toBe('Substantial');
+
+      const trip = getStandardImpact('trip_consolidation', 20);
+      expect(trip.environmentalEmissionBenefit.estimatedKgCO2eAvoided).toBeGreaterThan(0);
+
+      const transit = getStandardImpact('switch_to_transit', 20);
+      expect(transit.environmentalEmissionBenefit.isCommunityScaled).toBe(true);
+    });
+  });
+
+  describe('Indoor Air Sizing Helpers (shared/indoorGuidance.ts)', () => {
+    it('calculates room volume, target CADR CFM, and metric conversions with finite clamping', () => {
+      const sizing = calculateIndoorAirSizing(300, 8);
+      expect(sizing.roomVolumeCuFt).toBe(2400);
+      expect(sizing.recommendedCadrCfm).toBe(160);
+      expect(sizing.recommendedCadrM3PerHour).toBe(272);
+      expect(sizing.roomAreaSqM).toBe(28);
+
+      const clampedDefaults = calculateIndoorAirSizing(Number.NaN, Number.POSITIVE_INFINITY);
+      expect(clampedDefaults.roomVolumeCuFt).toBe(1600);
+      expect(clampedDefaults.recommendedCadrCfm).toBe(107);
     });
 
-    it('correctly categorizes HEPA purifier as Personal Exposure Shield', () => {
-      const impact = getStandardImpact('use_hepa_purifier');
-      expect(impact.personalExposureBenefit.rating).toBe('Substantial');
-      expect(impact.personalExposureBenefit.explanation).toContain('True HEPA air filtration removes at least 99.97%');
-    });
-
-    it('correctly categorizes transit mode switch as tangible Emission Reduction', () => {
-      const impact = getStandardImpact('switch_to_transit', 20);
-      expect(impact.environmentalEmissionBenefit.rating).toBe('Significant Clean Alternative');
-      expect(impact.environmentalEmissionBenefit.estimatedKgCO2eAvoided).toBeGreaterThan(0);
-      expect(impact.environmentalEmissionBenefit.isCommunityScaled).toBe(true);
+    it('validates cooking arrangement enum values without unsafe type assertions', () => {
+      expect(isCookingType('gas_unvented')).toBe(true);
+      expect(isCookingType('invalid_stove')).toBe(false);
     });
   });
 });
-

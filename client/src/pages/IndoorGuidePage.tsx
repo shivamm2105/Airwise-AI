@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { AirQualityData, CookingType, HouseholdPreferences } from '@shared/types';
 import { mergeHouseholdPreferences } from '@shared/preferences';
+import {
+  calculateIndoorAirSizing,
+  COOKING_TYPE_DESCRIPTIONS,
+  isCookingType
+} from '@shared/indoorGuidance';
 import { api } from '../services/api';
 import { InlineFeedbackBanner } from '../components/InlineFeedbackBanner';
 import {
@@ -42,8 +47,7 @@ export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({
     setUsesIncense((preferences.indoorCombustionSources?.length ?? 0) > 0);
   }, [preferences]);
 
-  const roomVolumeCuFt = roomSizeSqFt * 8;
-  const recommendedCADR = Math.round((roomVolumeCuFt * 4) / 60);
+  const sizing = calculateIndoorAirSizing(roomSizeSqFt);
 
   const outdoorAQI = airQuality?.aqi ?? 150;
   const isOutdoorSevere = outdoorAQI > 150;
@@ -117,7 +121,7 @@ export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({
             </label>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-extrabold text-teal-400">{roomSizeSqFt}</span>
-              <span className="text-slate-400">sq. ft. (~{Math.round(roomSizeSqFt * 0.093)} m²)</span>
+              <span className="text-slate-400">sq. ft. (~{sizing.roomAreaSqM} m²)</span>
             </div>
             <input
               id="room-size-range"
@@ -142,11 +146,10 @@ export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({
                 type="button"
                 aria-pressed={hasHEPA}
                 onClick={() => setHasHEPA(true)}
-                className={`flex-1 py-2 rounded-lg font-bold text-xs transition-colors ${
-                  hasHEPA
-                    ? 'bg-emerald-700 text-white'
-                    : 'bg-navy-800 text-slate-300 border border-slate-700'
-                }`}
+                className={`flex-1 py-2 rounded-lg font-bold text-xs transition-colors ${hasHEPA
+                  ? 'bg-emerald-700 text-white'
+                  : 'bg-navy-800 text-slate-300 border border-slate-700'
+                  }`}
               >
                 HEPA Purifier
               </button>
@@ -154,11 +157,10 @@ export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({
                 type="button"
                 aria-pressed={!hasHEPA}
                 onClick={() => setHasHEPA(false)}
-                className={`flex-1 py-2 rounded-lg font-bold text-xs transition-colors ${
-                  !hasHEPA
-                    ? 'bg-amber-500 text-navy-950'
-                    : 'bg-navy-800 text-slate-300 border border-slate-700'
-                }`}
+                className={`flex-1 py-2 rounded-lg font-bold text-xs transition-colors ${!hasHEPA
+                  ? 'bg-amber-500 text-navy-950'
+                  : 'bg-navy-800 text-slate-300 border border-slate-700'
+                  }`}
               >
                 None / Basic
               </button>
@@ -176,7 +178,9 @@ export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({
             <select
               id="cooking-arrangement-select"
               value={cookingType}
-              onChange={e => setCookingType(e.target.value as CookingType)}
+              onChange={e => {
+                if (isCookingType(e.target.value)) setCookingType(e.target.value);
+              }}
               className="w-full p-2 rounded-lg bg-navy-800 border border-slate-700 text-white text-xs focus:border-teal-500"
             >
               <option value="induction_electric">Electric Induction (Cleanest)</option>
@@ -185,7 +189,7 @@ export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({
               <option value="biomass_chulha">Biomass / Chulha (High Smoke)</option>
             </select>
             <span className="text-[11px] text-slate-400 block">
-              {cookingType === 'induction_electric' ? 'Zero combustion byproducts' : 'Generates fine NO2 and soot'}
+              {COOKING_TYPE_DESCRIPTIONS[cookingType]}
             </span>
           </div>
 
@@ -199,11 +203,10 @@ export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({
                 type="button"
                 aria-pressed={!usesIncense}
                 onClick={() => setUsesIncense(false)}
-                className={`flex-1 py-2 rounded-lg font-bold text-xs transition-colors ${
-                  !usesIncense
-                    ? 'bg-emerald-700 text-white'
-                    : 'bg-navy-800 text-slate-300 border border-slate-700'
-                }`}
+                className={`flex-1 py-2 rounded-lg font-bold text-xs transition-colors ${!usesIncense
+                  ? 'bg-emerald-700 text-white'
+                  : 'bg-navy-800 text-slate-300 border border-slate-700'
+                  }`}
               >
                 None
               </button>
@@ -211,11 +214,10 @@ export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({
                 type="button"
                 aria-pressed={usesIncense}
                 onClick={() => setUsesIncense(true)}
-                className={`flex-1 py-2 rounded-lg font-bold text-xs transition-colors ${
-                  usesIncense
-                    ? 'bg-rose-700 text-white'
-                    : 'bg-navy-800 text-slate-300 border border-slate-700'
-                }`}
+                className={`flex-1 py-2 rounded-lg font-bold text-xs transition-colors ${usesIncense
+                  ? 'bg-rose-700 text-white'
+                  : 'bg-navy-800 text-slate-300 border border-slate-700'
+                  }`}
               >
                 Burned Regularly
               </button>
@@ -238,8 +240,8 @@ export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({
           </div>
           <div className="px-4 py-2 rounded-xl bg-navy-900 border border-teal-500/40 text-center shrink-0">
             <span className="text-xs text-slate-400 uppercase tracking-wider block">Target CADR</span>
-            <span className="text-xl font-extrabold text-teal-400">&ge; {recommendedCADR} CFM</span>
-            <span className="text-[10px] text-slate-400 block">(~{Math.round(recommendedCADR * 1.7)} m³/h)</span>
+            <span className="text-xl font-extrabold text-teal-400">&ge; {sizing.recommendedCadrCfm} CFM</span>
+            <span className="text-[10px] text-slate-400 block">(~{sizing.recommendedCadrM3PerHour} m³/h)</span>
           </div>
         </div>
 
@@ -247,7 +249,7 @@ export const IndoorGuidePage: React.FC<IndoorGuidePageProps> = ({
           <button
             type="button"
             onClick={handleSaveIndoorProfile}
-            className="px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-600 text-white font-bold text-xs flex items-center gap-2 shadow-md transition-colors"
+            className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs flex items-center gap-2 shadow-md transition-colors"
           >
             {feedback?.variant === 'success' ? (
               <>

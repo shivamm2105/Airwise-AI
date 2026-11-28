@@ -6,6 +6,24 @@ interface ForecastChartProps {
   hourly: HourlyForecastPoint[];
 }
 
+function getBarColorClass(aqi: number | null): string {
+  if (aqi === null) return 'text-slate-600';
+  if (aqi <= 50) return 'text-emerald-500 group-hover:text-emerald-400';
+  if (aqi <= 100) return 'text-amber-500 group-hover:text-amber-400';
+  if (aqi <= 150) return 'text-orange-500 group-hover:text-orange-400';
+  if (aqi <= 200) return 'text-red-500 group-hover:text-red-400';
+  if (aqi <= 300) return 'text-purple-500 group-hover:text-purple-400';
+  return 'text-rose-700 group-hover:text-rose-600';
+}
+
+function formatHour(isoStr: string): string {
+  const date = new Date(isoStr);
+  if (Number.isNaN(date.getTime())) {
+    return isoStr.length >= 16 ? isoStr.substring(11, 16) : isoStr;
+  }
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+}
+
 export const ForecastChart: React.FC<ForecastChartProps> = React.memo(({ hourly }) => {
   if (!hourly || hourly.length === 0) {
     return (
@@ -17,25 +35,6 @@ export const ForecastChart: React.FC<ForecastChartProps> = React.memo(({ hourly 
   }
 
   const maxAqi = Math.max(...hourly.map(h => h.aqi ?? 0), 100);
-
-  const getColorClass = (aqi: number | null) => {
-    if (aqi === null) return 'bg-slate-600';
-    if (aqi <= 50) return 'bg-emerald-500 hover:bg-emerald-400';
-    if (aqi <= 100) return 'bg-amber-500 hover:bg-amber-400';
-    if (aqi <= 150) return 'bg-orange-500 hover:bg-orange-400';
-    if (aqi <= 200) return 'bg-red-500 hover:bg-red-400';
-    if (aqi <= 300) return 'bg-purple-500 hover:bg-purple-400';
-    return 'bg-rose-700 hover:bg-rose-600';
-  };
-
-  const formatHour = (isoStr: string) => {
-    try {
-      const d = new Date(isoStr);
-      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-    } catch {
-      return isoStr.substring(11, 16);
-    }
-  };
 
   return (
     <div className="bg-navy-800/90 border border-slate-700/60 rounded-xl p-5 shadow-lg">
@@ -76,7 +75,6 @@ export const ForecastChart: React.FC<ForecastChartProps> = React.memo(({ hourly 
               key={`${pt.time}-${idx}`}
               className="flex-1 min-w-[36px] sm:min-w-[44px] flex flex-col items-center justify-end h-full group relative text-center bg-transparent border-0 p-0 cursor-default rounded-md"
             >
-              {/* Tooltip on hover/focus (decorative; summary read via sr-only below) */}
               <div
                 aria-hidden="true"
                 className="absolute bottom-full mb-2 hidden group-hover:flex group-focus-visible:flex flex-col items-center pointer-events-none z-20"
@@ -95,10 +93,14 @@ export const ForecastChart: React.FC<ForecastChartProps> = React.memo(({ hourly 
               <span className="text-[10px] font-bold text-slate-300 mb-1 group-hover:text-white">
                 {visibleValue}
               </span>
-              <span
-                className={`w-full block rounded-t-md transition-all duration-200 ${getColorClass(pt.aqi)}`}
-                style={{ height: `${heightPercent}%` }}
-              />
+              <svg
+                viewBox="0 0 10 100"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+                className={`w-full flex-1 block ${getBarColorClass(pt.aqi)} transition-colors duration-200`}
+              >
+                <rect x="0" y={100 - heightPercent} width="10" height={heightPercent} rx="1.5" fill="currentColor" />
+              </svg>
               <span className="text-[10px] text-slate-400 font-medium mt-1 truncate max-w-full">
                 {shortTime}
               </span>

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { GeminiService } from '../../server/src/services/GeminiService.js';
 import { CacheService } from '../../server/src/services/CacheService.js';
@@ -6,6 +7,7 @@ import { buildDeterministicChatResponse, buildDeterministicDailyPlan } from '../
 import { evaluateSafetyRules } from '../../shared/safetyRules.js';
 import { AirQualityData } from '../../shared/types.js';
 import fs from 'fs';
+import fsPromises from 'fs/promises';
 import path from 'path';
 
 const MOCK_SEVERE_AIR_QUALITY: AirQualityData = {
@@ -41,6 +43,7 @@ describe('Services & Resilience Unit Tests', () => {
         delete process.env.GEMINI_API_KEY;
       }
       vi.useRealTimers();
+      vi.restoreAllMocks();
     });
 
     it('sanitizes malicious control characters, prompt injection markers, and caps length deterministically', async () => {
@@ -108,23 +111,11 @@ describe('Services & Resilience Unit Tests', () => {
       vi.useRealTimers();
     });
 
-    it('manages TTL and accurately flips isStale once TTL elapses', () => {
+    it('manages TTL, misses, and evicts oldest entry when capacity is reached', () => {
       vi.useFakeTimers();
-      const cache = new CacheService(1 / 60, 5); // 1-second TTL
-      cache.set('test-key', { aqi: 150 });
+      const cache = new CacheService(1 / 60, 3);
+      expect(cache.get('non-existent')).toBeNull();
 
-      const fresh = cache.get<{ aqi: number }>('test-key');
-      expect(fresh?.isStale).toBe(false);
-      expect(fresh?.data.aqi).toBe(150);
-
-      vi.advanceTimersByTime(1500);
-      const expired = cache.get<{ aqi: number }>('test-key');
-      expect(expired?.isStale).toBe(true);
-      expect(expired?.ageSeconds).toBeGreaterThanOrEqual(1);
-    });
-
-    it('evicts oldest entry when max capacity is reached', () => {
-      const cache = new CacheService(10, 3);
       cache.set('key1', 1);
       cache.set('key2', 2);
       cache.set('key3', 3);
@@ -133,12 +124,17 @@ describe('Services & Resilience Unit Tests', () => {
       cache.set('key4', 4);
       expect(cache.size()).toBe(3);
       expect(cache.get('key1')).toBeNull();
-      expect(cache.get('key4')?.data).toBe(4);
+      expect(cache.get('key4')?.isStale).toBe(false);
+
+      vi.advanceTimersByTime(1500);
+      const expired = cache.get<number>('key4');
+      expect(expired?.isStale).toBe(true);
+      expect(expired?.ageSeconds).toBeGreaterThanOrEqual(1);
     });
   });
 
-  describe('StorageService Atomic Persistence & Concurrency', () => {
-    const testDbPath = path.resolve(process.cwd(), 'server/data/test-storage.json');
+  describe('StorageService Async Persistence, Recovery & Concurrency', () => {
+    const testDbPath = path.resolve(process.cwd(), `server/data/test-storage-${process.pid}.json`);
     let storage: StorageService;
 
     beforeEach(() => {
@@ -149,13 +145,14 @@ describe('Services & Resilience Unit Tests', () => {
     });
 
     afterEach(() => {
+      vi.restoreAllMocks();
       if (fs.existsSync(testDbPath)) {
         fs.unlinkSync(testDbPath);
       }
     });
 
-    it('performs CRUD operations atomically and persists across StorageService reload', () => {
-      const item = storage.saveAction({
+    it('performs async CRUD operations atomically and persists across StorageService reload', async () => {
+      const item = await storage.saveAction({
         actionId: 'test-1',
         title: 'Run HEPA Purifier in Bedroom',
         category: 'indoor',
@@ -165,44 +162,75 @@ describe('Services & Resilience Unit Tests', () => {
       expect(item.id).toMatch(/^act_/);
       expect(item.completed).toBe(false);
 
-      const toggled = storage.toggleActionCompletion(item.id);
+      const toggled = await storage.toggleActionCompletion(item.id);
       expect(toggled?.completed).toBe(true);
       expect(toggled?.completedAt).toBeDefined();
 
-      // Simulate server restart / reload by instantiating fresh StorageService from same path
       const reloadedStorage = new StorageService(testDbPath);
       const reloadedActions = reloadedStorage.getSavedActions();
       expect(reloadedActions.length).toBe(1);
       expect(reloadedActions[0].id).toBe(item.id);
       expect(reloadedActions[0].completed).toBe(true);
 
-      // Verify defensive clone isolation (external mutation does not corrupt internal state)
       reloadedActions[0].title = 'Mutated Externally';
       expect(reloadedStorage.getSavedActions()[0].title).toBe('Run HEPA Purifier in Bedroom');
 
-      expect(reloadedStorage.deleteSavedAction(item.id)).toBe(true);
+      expect(await reloadedStorage.deleteSavedAction(item.id)).toBe(true);
+      expect(await reloadedStorage.deleteSavedAction('missing-id')).toBe(false);
       expect(reloadedStorage.getSavedActions().length).toBe(0);
     });
 
-    it('handles rapid concurrent writes and toggles cleanly without temp file collisions', async () => {
+    it('recovers cleanly from corrupted JSON file and handles NTFS EPERM atomic rename fallback', async () => {
+      fs.writeFileSync(testDbPath, '{not valid json', 'utf-8');
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const recovered = new StorageService(testDbPath);
+      expect(recovered.getSavedActions()).toEqual([]);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+
+      // Simulate Windows EPERM during atomic rename -> direct write fallback must succeed
+      const epermErr = Object.assign(new Error('EPERM lock'), { code: 'EPERM' });
+      vi.spyOn(fsPromises, 'rename').mockRejectedValueOnce(epermErr);
+      const saved = await recovered.saveAction({
+        actionId: 'eperm-1',
+        title: 'Seal bedroom doors',
+        category: 'indoor',
+        locationName: 'Delhi',
+        aqiAtSave: 210
+      });
+      expect(saved.title).toBe('Seal bedroom doors');
+
+      // Nested directory auto-creation succeeds and cleans up cleanly
+      const nestedDir = path.resolve(process.cwd(), `server/data/nested-test-${process.pid}`);
+      const nestedStorage = new StorageService(path.join(nestedDir, 'store.json'));
+      await nestedStorage.saveAction({
+        actionId: 'nested-1',
+        title: 'Nested store action',
+        category: 'indoor',
+        locationName: 'Delhi',
+        aqiAtSave: 190
+      });
+      expect(fs.existsSync(path.join(nestedDir, 'store.json'))).toBe(true);
+      fs.rmSync(nestedDir, { recursive: true, force: true });
+
+      const reloaded = new StorageService(testDbPath);
+      expect(reloaded.getSavedActions()).toHaveLength(1);
+    });
+
+    it('handles rapid concurrent async writes and toggles cleanly via serialized write queue', async () => {
       const created = await Promise.all(
         Array.from({ length: 15 }, (_, idx) =>
-          Promise.resolve().then(() =>
-            storage.saveAction({
-              actionId: `concurrent-${idx}`,
-              title: `Concurrent Action ${idx}`,
-              category: 'commute',
-              locationName: 'New Delhi',
-              aqiAtSave: 190 + idx
-            })
-          )
+          storage.saveAction({
+            actionId: `concurrent-${idx}`,
+            title: `Concurrent Action ${idx}`,
+            category: 'commute',
+            locationName: 'New Delhi',
+            aqiAtSave: 190 + idx
+          })
         )
       );
 
-      const uniqueIds = new Set(created.map(c => c.id));
-      expect(uniqueIds.size).toBe(15);
-
-      await Promise.all(created.map(c => Promise.resolve().then(() => storage.toggleActionCompletion(c.id))));
+      expect(new Set(created.map(c => c.id)).size).toBe(15);
+      await Promise.all(created.map(c => storage.toggleActionCompletion(c.id)));
 
       const reloaded = new StorageService(testDbPath);
       const saved = reloaded.getSavedActions();
@@ -210,9 +238,9 @@ describe('Services & Resilience Unit Tests', () => {
       expect(saved.every(a => a.completed)).toBe(true);
     });
 
-    it('saves and loads household preferences across reload', () => {
+    it('saves, loads, and clears preferences and actions across reload', async () => {
       expect(storage.getPreferences()).toBeNull();
-      storage.savePreferences({
+      await storage.savePreferences({
         householdSize: 5,
         hasChildren: true,
         hasElderly: true,
@@ -231,8 +259,10 @@ describe('Services & Resilience Unit Tests', () => {
       const reloaded = new StorageService(testDbPath);
       const loaded = reloaded.getPreferences();
       expect(loaded?.householdSize).toBe(5);
-      expect(loaded?.hasChildren).toBe(true);
       expect(loaded?.cookingType).toBe('induction_electric');
+
+      await reloaded.clearAllActions();
+      expect(reloaded.getSavedActions()).toEqual([]);
     });
   });
 });

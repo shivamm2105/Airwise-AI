@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
@@ -11,13 +12,13 @@ import { storageService } from '../../server/src/services/StorageService.js';
 describe('End-to-End User Journey Workflow Test', () => {
   const originalGeminiKey = process.env.GEMINI_API_KEY;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     process.env.NODE_ENV = 'test';
     delete process.env.GEMINI_API_KEY;
     const demo = new DemoAirQualityProvider();
     ProviderFactory.getProvider = () => demo;
     airQualityService.setProvider(demo);
-    storageService.clearAllActions();
+    await storageService.clearAllActions();
   });
 
   afterAll(() => {

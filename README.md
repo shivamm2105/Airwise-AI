@@ -5,7 +5,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![TypeScript: Strict](https://img.shields.io/badge/TypeScript-Strict%20Mode-blue.svg)](tsconfig.json)
-[![Tests: 97 Passed](https://img.shields.io/badge/Tests-97%2F97%20Passing-emerald.svg)](tests/)
+[![Tests: 83 Passed | 94% Lines](https://img.shields.io/badge/Tests-83%2F83%20Passing%20%2894%25%20Lines%29-emerald.svg)](tests/)
 [![Lighthouse: 100/100](https://img.shields.io/badge/Lighthouse-100%2F100%20Desktop%20%26%20Mobile-brightgreen.svg)](docs/FINAL_LIGHTHOUSE_REPORT.md)
 [![WCAG: 2.2 AA](https://img.shields.io/badge/Accessibility-WCAG%202.2%20AA-teal.svg)](docs/ACCESSIBILITY_AUDIT.md)
 [![Repo Size: < 0.85 MB](https://img.shields.io/badge/Repo%20Size-%3C0.85%20MB%20%28%3C8MB%20target%29-brightgreen.svg)](scripts/size-audit.js)
@@ -87,12 +87,14 @@ airwise-ai/
 │   │   ├── middleware/         # Helmet CSP, CORS, rate limiting, and error handler
 │   │   ├── providers/          # Open-Meteo & Demo air quality provider abstraction
 │   │   ├── routes/             # RESTful API route definitions
-│   │   ├── services/           # GeminiService, AirQualityService, CacheService, Storage
-│   │   └── index.ts            # Server entrypoint and static SPA hosting
+│   │   ├── services/           # GeminiService, GeminiGuardrails, AirQualityService, Storage
+│   │   └── index.ts            # Server entrypoint and rate-limited SPA hosting
 │   └── tsconfig.json           # Server TypeScript configuration
 ├── shared/                     # Universal Domain Code & Contracts
 │   ├── types.ts                # Domain interfaces and type contracts
-│   ├── schemas.ts              # Zod validation schemas
+│   ├── preferences.ts          # Pure-TS preference defaults & merge helpers
+│   ├── indoorGuidance.ts       # Pure CADR sizing & indoor hygiene constants
+│   ├── schemas.ts              # Zod v4 validation schemas
 │   ├── safetyRules.ts          # Deterministic safety rules and CPCB/US AQI engine
 │   └── impact.ts               # Direct impact calculations and methodologies
 ├── tests/                      # Multi-Tier Automated Test Suite (Vitest)
@@ -160,9 +162,9 @@ GEMINI_MODEL=gemini-3.5-flash-lite
 | **Server Dev** | `npm run dev:server` | Starts backend in watch mode via `tsx`. |
 | **Client Dev** | `npm run dev:client` | Starts Vite development server with API proxying. |
 | **Typecheck** | `npm run typecheck` | Strictly typechecks root, shared, server, and client code. |
-| **Linting** | `npm run lint` | Runs ESLint 9 across TypeScript, React Hooks, and JSX-A11y rules. |
-| **Automated Tests** | `npm test` | Runs the complete 97-test suite across Unit, API, Component/WCAG, and E2E suites. |
-| **Coverage Report** | `npm run test:coverage` | Runs all 12 Vitest suites with V8 AST statement/branch/line coverage. |
+| **Linting** | `npm run lint` | Runs ESLint 9 (`no-explicit-any`, React Hooks, JSX-A11y) across all files. |
+| **Automated Tests** | `npm test` | Runs the complete 83-test multi-tier suite across 12 Vitest suites. |
+| **Coverage Report** | `npm run test:coverage` | Runs all 12 Vitest suites enforcing V8 coverage thresholds (`>93%` stmts, `>94%` lines). |
 | **Production Build**| `npm run build` | Compiles code-split client (`dist/client`) and server (`dist/server`). |
 | **Start Production**| `npm start` | Launches compiled gzip-compressed Express server hosting static client files. |
 | **Size Audit** | `npm run size-audit` | Audits repository size and scans file contents for secret patterns. |
@@ -171,11 +173,11 @@ GEMINI_MODEL=gemini-3.5-flash-lite
 
 ## 6. Verified Automated Test Results
 
-The test suite was executed and passed with **100% success** (**97 tests passing across 12 suites**, **0 failures**, **0 skipped**, plus live Google Chrome & Microsoft Edge E2E verification across 8 responsive viewports):
+The consolidated multi-tier test suite passes with **100% success** (**83 tests passing across 12 suites**, **0 failures**, **0 skipped**, **`93.31%` Statements / `94.19%` Lines / `93.82%` Functions / `82.70%` Branches** via V8 AST coverage, plus live Google Chrome & Microsoft Edge E2E verification across 8 responsive viewports):
 
-- `tests/unit/` (8 suites, 61 tests): AQI breakpoints, safety rules, dual impact math, Zod v4 schemas, Open-Meteo UTC/clamping/cache, Gemini resilience & injection defense, atomic storage, client API wrapper.
-- `tests/integration/api-endpoints.test.ts` (19 tests): Express API contracts, CORS origin enforcement, rate limiting, parameter validation, error sanitization.
-- `tests/component/` (2 suites, 16 tests): Component rendering, keyboard/modal flows, automated `axe-core` WCAG checks across rendered views.
+- `tests/unit/` (8 suites, 58 tests): AQI breakpoints, safety rules, dual impact math, indoor CADR math, Zod v4 schemas, Open-Meteo UTC/clamping/geocoding/cache, Gemini resilience & injection defense, async serialized NTFS-safe storage, client API wrapper.
+- `tests/integration/api-endpoints.test.ts` (10 tests): Express API contracts, CORS origin + state-changing write protections (`403`), `/robots.txt`, `/favicon.ico`, rate limiting headers, parameter validation, 500 secret redaction.
+- `tests/component/` (2 suites, 14 tests): UI components across all 7 AQI severity states, SVG ForecastChart, all 9 pages, LocationModal flows, keyboard accessibility, and automated `axe-core` WCAG verification.
 - `tests/e2e/workflow.test.ts` (1 test): Full multi-step API journey.
 
 ---
@@ -183,8 +185,8 @@ The test suite was executed and passed with **100% success** (**97 tests passing
 ## 7. Security, Privacy & Compliance Highlights
 
 - **Server-Side API Keys**: API credentials never leak to the client bundle (`0` matches in built JS).
-- **Zero Known Vulnerabilities**: Both `npm audit` and `npm audit --omit=dev` report `found 0 vulnerabilities`.
-- **Strict Validation & Headers**: Route payloads validated via Zod v4; production CORS explicitly scoped (no wildcard `*.vercel.app`); Express Helmet + `vercel.json` edge CSP headers active.
+- **Zero Known Vulnerabilities**: Both `npm audit` and `npm audit --omit=dev --offline` report `found 0 vulnerabilities`.
+- **Strict Validation, Inline-Free CSP & Headers**: Route payloads validated via Zod v4; production CORS explicitly scoped + blocks untrusted cross-origin writes (`403`); Express Helmet + `vercel.json` enforce inline-style-free CSP (`style-src 'self'`, `script-src 'self'`, `object-src 'none'`), HSTS, and static rate limiting (`staticRateLimiter`).
 - **Repository Under 1 MB**: Source footprint `< 0.85 MB`, well below the 8 MB safety target and 10 MB competition ceiling.
 - **Accessibility**: WCAG 2.2 Level AA verified via ESLint `jsx-a11y`, `axe-core`, and `100/100` Lighthouse Accessibility on Mobile & Desktop.
 

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OpenMeteoProvider } from '../../server/src/providers/OpenMeteoProvider.js';
 import { DemoAirQualityProvider } from '../../server/src/providers/DemoAirQualityProvider.js';
@@ -23,6 +24,7 @@ describe('Environmental Data Integrity Unit Tests', () => {
       expect(calculateCPCBSubIndexPM25(30)).toBe(50);
       expect(calculateCPCBSubIndexPM25(60)).toBe(100);
       expect(calculateCPCBSubIndexPM25(-10)).toBe(0);
+      expect(calculateCPCBSubIndexPM25(900)).toBe(500);
       expect(calculateCPCBSubIndexPM10(100)).toBe(100);
       expect(calculateUSEPASubIndexPM25(9.0)).toBe(50);
       expect(calculateUSEPASubIndexPM25(35.4)).toBe(100);
@@ -44,12 +46,10 @@ describe('Environmental Data Integrity Unit Tests', () => {
       expect(data.indexStandard).toBe('CPCB_AQI');
     });
 
-    it('identifies international coordinates as US_AQI', async () => {
+    it('identifies international coordinates as US_AQI and resolves UK/US fallback search', async () => {
       const data = await demo.getAirQuality({ latitude: 51.5074, longitude: -0.1278, name: 'London', country: 'UK' });
       expect(data.indexStandard).toBe('US_AQI');
-    });
 
-    it('returns structured location search suggestions', async () => {
       const results = await demo.searchLocations('Delhi');
       expect(results.length).toBeGreaterThan(0);
       expect(results[0].name).toContain('Delhi');
@@ -68,14 +68,32 @@ describe('Environmental Data Integrity Unit Tests', () => {
       expect(provider.name).toContain('Open-Meteo');
     });
 
-    it('gracefully handles empty or very short geocoding searches', async () => {
-      const empty = await provider.searchLocations('');
-      const singleChar = await provider.searchLocations('a');
-      expect(empty).toEqual([]);
-      expect(singleChar).toEqual([]);
+    it('handles empty, valid, non-array, and failing geocoding searches gracefully', async () => {
+      expect(await provider.searchLocations('')).toEqual([]);
+      expect(await provider.searchLocations('a')).toEqual([]);
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            results: [{ name: 'Seattle', latitude: 47.61, longitude: -122.33, country: 'United States', admin1: 'WA', timezone: 'UTC' }]
+          }),
+          { status: 200 }
+        )
+      );
+      const valid = await provider.searchLocations('Seattle');
+      expect(valid).toHaveLength(1);
+      expect(valid[0].name).toBe('Seattle');
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 200 }));
+      expect(await provider.searchLocations('EmptyResults')).toEqual([]);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('Error', { status: 500 }));
+      expect(await provider.searchLocations('FailCity')).toEqual([]);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
     });
 
-    it('requests UTC GMT timezone, preserves missing/negative pollutants as null, and converts CO µg->mg', async () => {
+    it('requests UTC GMT timezone, preserves missing/negative pollutants as null, converts CO µg->mg, and applies US_AQI PM2.5 fallback', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-11-27T09:00:00.000Z'));
 
@@ -105,32 +123,44 @@ describe('Environmental Data Integrity Unit Tests', () => {
         )
       );
 
-      const data = await provider.getAirQuality({ latitude: 28.6139, longitude: 77.209, name: 'New Delhi' });
-
+      const delhiData = await provider.getAirQuality({ latitude: 28.6139, longitude: 77.209, name: 'New Delhi' });
       const calledUrl = String(fetchSpy.mock.calls[0][0]);
       expect(calledUrl).toContain('timezone=GMT');
-      expect(data.observedAt).toBe('2026-11-27T09:00:00.000Z');
-      expect(data.pollutants.co).toBe(1.4);
-      expect(data.pollutants.no2).toBeNull();
-      expect(data.pollutants.so2).toBeNull();
-      expect(data.qualityMetadata.missingPollutants).toContain('NO2');
-      expect(data.qualityMetadata.missingPollutants).toContain('SO2');
-      expect(data.indexStandard).toBe('CPCB_AQI');
-      expect(data.hourlyForecast[1].aqi).toBe(calculateCPCBSubIndexPM25(120));
+      expect(delhiData.observedAt).toBe('2026-11-27T09:00:00.000Z');
+      expect(delhiData.pollutants.co).toBe(1.4);
+      expect(delhiData.pollutants.no2).toBeNull();
+      expect(delhiData.pollutants.so2).toBeNull();
+      expect(delhiData.indexStandard).toBe('CPCB_AQI');
+      expect(delhiData.hourlyForecast[1].aqi).toBe(calculateCPCBSubIndexPM25(120));
+
+      // Non-India US_AQI fallback when current.us_aqi and hourly.us_aqi are null + invalid timestamp safety
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            current: { time: 'not-a-timestamp', us_aqi: null, pm2_5: 35.4, pm10: null },
+            hourly: { time: ['not-a-timestamp'], pm2_5: [35.4], pm10: [null], us_aqi: [null] }
+          }),
+          { status: 200 }
+        )
+      );
+      const seattleData = await provider.getAirQuality({ latitude: 47.61, longitude: -122.33, name: 'Seattle', country: 'US' });
+      expect(seattleData.indexStandard).toBe('US_AQI');
+      expect(seattleData.aqi).toBe(100);
+      expect(seattleData.hourlyForecast[0].aqi).toBe(100);
+      expect(seattleData.observedAt).toBe('2026-11-27T09:00:00.000Z');
     });
 
-    it('throws informative error on upstream HTTP failure or timeout', async () => {
+    it('throws informative error on upstream HTTP failure, missing current observations, or timeout', async () => {
       vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
         new Response('Bad Gateway', { status: 502, statusText: 'Bad Gateway' })
       );
-      await expect(
-        provider.getAirQuality({ latitude: 51.5, longitude: -0.12, name: 'London' })
-      ).rejects.toThrow(/HTTP 502/);
+      await expect(provider.getAirQuality({ latitude: 51.5, longitude: -0.12, name: 'London' })).rejects.toThrow(/HTTP 502/);
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({ hourly: { time: [] } }), { status: 200 }));
+      await expect(provider.getAirQuality({ latitude: 51.5, longitude: -0.12, name: 'London' })).rejects.toThrow(/did not contain current observations/);
 
       vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new DOMException('Aborted', 'AbortError'));
-      await expect(
-        provider.getAirQuality({ latitude: 51.5, longitude: -0.12, name: 'London' })
-      ).rejects.toThrow(/Open-Meteo/);
+      await expect(provider.getAirQuality({ latitude: 51.5, longitude: -0.12, name: 'London' })).rejects.toThrow(/Open-Meteo/);
     });
   });
 
@@ -145,7 +175,7 @@ describe('Environmental Data Integrity Unit Tests', () => {
       airQualityCache.clear();
     });
 
-    it('deduplicates concurrent requests for identical coordinates and serves stale cache when upstream fails', async () => {
+    it('deduplicates concurrent requests and serves cached or stale data gracefully', async () => {
       let fetchCalls = 0;
       const demo = new DemoAirQualityProvider();
 
@@ -156,8 +186,7 @@ describe('Environmental Data Integrity Unit Tests', () => {
           if (fetchCalls > 1) {
             throw new Error('Upstream network timeout');
           }
-          const base = await demo.getAirQuality(coords);
-          return base;
+          return demo.getAirQuality(coords);
         },
         async searchLocations(q) {
           return demo.searchLocations(q);
@@ -167,7 +196,6 @@ describe('Environmental Data Integrity Unit Tests', () => {
       const service = new AirQualityService(flakyProvider);
       const coords = { latitude: 19.076, longitude: 72.8777, name: 'Mumbai' };
 
-      // Fire 3 concurrent requests on cold cache -> must hit provider only ONCE
       const [r1, r2, r3] = await Promise.all([
         service.getAirQualityByCoordinates(coords),
         service.getAirQualityByCoordinates(coords),
@@ -179,7 +207,12 @@ describe('Environmental Data Integrity Unit Tests', () => {
       expect(r2.location.name).toBe('Mumbai');
       expect(r3.aqi).toBe(r1.aqi);
 
-      // Advance past 15-minute TTL -> cache expires, provider fails -> stale cache returned explicitly
+      // Fresh cache hit returns immediately without upstream call
+      const freshHit = await service.getAirQualityByCoordinates(coords);
+      expect(fetchCalls).toBe(1);
+      expect(freshHit.isStale).toBe(false);
+
+      // Expire TTL -> upstream fails -> stale cache returned with explicit metadata
       vi.advanceTimersByTime(16 * 60 * 1000);
       const staleRes = await service.getAirQualityByCoordinates(coords);
       expect(fetchCalls).toBe(2);

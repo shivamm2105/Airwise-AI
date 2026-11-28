@@ -12,7 +12,13 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json-summary'],
       include: ['shared/**/*.ts', 'server/src/**/*.ts', 'client/src/**/*.{ts,tsx}'],
-      exclude: ['**/*.d.ts', '**/main.tsx', 'server/src/index.ts', 'shared/types.ts', 'server/src/providers/AirQualityProvider.ts']
+      exclude: ['**/*.d.ts', '**/main.tsx', 'shared/types.ts', 'server/src/providers/AirQualityProvider.ts'],
+      thresholds: {
+        statements: 90,
+        branches: 82,
+        functions: 88,
+        lines: 90
+      }
     }
   },
   resolve: {

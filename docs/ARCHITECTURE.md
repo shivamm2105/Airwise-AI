@@ -7,29 +7,28 @@
 ```
 +-----------------------------------------------------------------------------------+
 |                                  USER / CLIENT                                    |
-|  - React 18 + Vite + Tailwind CSS + Lucide Icons + Recharts                       |
+|  - React 18 + Vite + Tailwind CSS + Lucide Icons + Lightweight SVG Visualizations |
 |  - WCAG 2.2 AA Accessible UI (No color-only indicators, screen-reader semantics)   |
-|  - Local Offline Persistence Store & Export Engine                                |
+|  - Strict inline-style-free rendering compatible with `style-src 'self'` CSP      |
 +----------------------------------------+------------------------------------------+
                                          | REST / JSON
                                          v
 +-----------------------------------------------------------------------------------+
 |                             AIRWISE EXPRESS SERVER                                |
-|  - Security: Helmet CSP, Restricted CORS, express-rate-limit, Zod input validation|
-|  - Production-Safe Error Sanitization (No stack traces in production)             |
+|  - Security: Strict Helmet CSP (`style-src 'self'`), Origin CORS + write block,   |
+|              API/AI/static rate limiting, Zod v4 input & param validation         |
+|  - Compression (`compression`) & production-safe sanitized error handling         |
 +-------------------+--------------------+--------------------+---------------------+
                     |                    |                    |
                     v                    v                    v
       +-----------------------------+  +--------------------+  +--------------------+
       |    AIR QUALITY SERVICE      |  | DETERMINISTIC      |  | GENAI SERVICE      |
-      | - In-Memory Cache (TTL: 15m)|  | SAFETY ENGINE      |  | - Official SDK     |
-      | - Stale-While-Revalidate    |  | - Official US EPA  |  |   (@google/genai)  |
-      | - Open-Meteo & CAMS Provider|  |   & CPCB NAQI      |  | - Grounded Context |
-      | - Simulation/Demo Provider  |  | - Smog Alerts      |  | - Prompt Injection |
-      | - Zero Pollutant Hallucinate|  | - N95 Guidance     |  |   Defense          |
-      | - CPCB NAQI Sub-Index Calc  |  | - Vent Protocols   |  | - Deterministic    |
-      +-----------------------------+  +--------------------+    Fallback Mode      |
-                                                               +--------------------+
+      | - In-Memory Cache (TTL: 15m)|  | SAFETY & IMPACT    |  | - Official SDK     |
+      | - In-Flight Deduplication   |  | - Official US EPA  |  |   (@google/genai)  |
+      | - Stale-While-Revalidate    |  |   & CPCB NAQI      |  | - Multi-Model      |
+      | - Open-Meteo & CAMS Provider|  | - Smog & N95 Rules |  |   Cascade & Abort  |
+      | - Zero Pollutant Hallucinate|  | - Exposure vs CO2  |  | - GeminiGuardrails |
+      +-----------------------------+  +--------------------+  +--------------------+
 ```
 
 ---
@@ -37,53 +36,33 @@
 ## 2. Layered Architecture & Separation of Concerns
 
 ### A. Shared Domain Layer (`shared/`)
-Contains pure TypeScript contracts, domain models, and deterministic engines shared across client and server:
+Pure TypeScript contracts, domain models, and deterministic engines shared across client and server:
 - `types.ts`: Universal interfaces for `AirQualityData`, `PollutantMeasurements`, `SafetyEvaluation`, `ImpactAssessment`, `HouseholdPreferences`, and `RecommendationActionItem`.
-- `schemas.ts`: Strict Zod validation schemas for input requests, coordinates, and household settings.
-- `safetyRules.ts`: Official US EPA and Indian CPCB NAQI breakpoints and deterministic health rule engine.
-- `impact.ts`: Transparent calculations for avoided transport emissions and qualitative distinctions between personal exposure shielding and environmental source abatement.
+- `preferences.ts`: Pure-TS default preference builder keeping Zod out of frontend bundles.
+- `indoorGuidance.ts`: Pure CADR room sizing math (4 ACH benchmark) and type guards for cooking setups.
+- `schemas.ts`: Strict Zod v4 validation schemas for request payloads, coordinates, route IDs, and Gemini plan validation.
+- `safetyRules.ts`: Table-driven US EPA & Indian CPCB NAQI breakpoints and deterministic clinical health guardrails.
+- `impact.ts`: Data-driven Direct Impact Explanation Engine distinguishing Personal Exposure Shielding from Environmental Emission Abatement.
 
 ### B. Backend Services Layer (`server/src/`)
 - **Providers (`providers/`)**:
   - `AirQualityProvider`: Abstract interface for environmental data ingestion.
-  - `OpenMeteoProvider`: Live integration with Copernicus Atmosphere Monitoring Service (CAMS) and Open-Meteo Air Quality & Geocoding APIs.
+  - `OpenMeteoProvider`: Live Copernicus CAMS & Open-Meteo ingestion with explicit GMT timezone handling, type-safe response parsing, and Geocoding lookup.
   - `DemoAirQualityProvider`: High-fidelity deterministic simulator for testing and offline demo modes.
-  - `ProviderFactory`: Factory pattern selecting provider dynamically via environment variables (`AIR_QUALITY_PROVIDER`).
+  - `ProviderFactory`: Factory selecting active provider dynamically via environment config.
 - **Services (`services/`)**:
-  - `CacheService`: Thread-safe LRU-style in-memory cache with configurable TTL (default 15 mins) and stale-while-revalidate flags.
-  - `AirQualityService`: Orchestrates geocoding, cache lookups, data normalization, and missing-pollutant flagging.
-  - `GeminiService`: Google Gemini official SDK client (`@google/genai`) with prompt injection sanitization, verified environmental grounding, and deterministic fallback mode.
-  - `StorageService`: Persistent storage for saved actions, completion checklists, and household preferences.
+  - `CacheService`: Bounded in-memory cache with 15-minute TTL and stale-while-revalidate metadata.
+  - `AirQualityService`: Request deduplication, cache orchestration, and stale fallback handling.
+  - `GeminiGuardrails`: Isolated `systemInstruction`, `<UNTRUSTED_USER_QUERY>` fencing, HTML/secret output sanitization, and deterministic clinical rule overrides.
+  - `GeminiService`: `@google/genai` multi-model cascade (`gemini-3.5-flash-lite` -> fallback chain) with per-attempt `AbortController` timeouts and Zod plan verification.
+  - `DeterministicGuidance`: Standalone verified fallback engine when Gemini keys or upstream quotas are unavailable.
+  - `StorageService`: Non-blocking `fs/promises` atomic persistence serialized via an internal write queue with NTFS `EPERM`/`EBUSY` recovery.
 - **Middleware (`middleware/`)**:
-  - `security.ts`: Helmet with strict CSP headers and restricted CORS.
-  - `rateLimiter.ts`: Sliding-window rate limiters for general API requests (120 req/15 min) and AI inference (40 req/15 min).
-  - `errorHandler.ts`: Centralized error handler preventing credential or path leakage.
+  - `security.ts`: Production `style-src 'self'` CSP, strict Origin CORS allowlist, and `blockUntrustedCrossOriginWrites`.
+  - `rateLimiter.ts`: Sliding-window rate limiters across API routes (`120/15m`), AI chat (`40/15m`), and static file routes (`300/15m`).
+  - `errorHandler.ts`: Production error redaction stripping internal stacks and secret token patterns.
 
 ### C. Frontend Presentation Layer (`client/src/`)
-- Built with React 18, Vite, and Tailwind CSS.
-- **Pages**:
-  1. `LandingPage`: Problem education, winter smog dynamics, and feature onboarding.
-  2. `DashboardPage`: Real-time AQI with index standard, 6 criteria pollutants, source attribution, and 24h hourly forecast trend chart.
-  3. `DailyPlanPage`: Time-bracketed routines (Morning, Commute, Indoor, Cooking, Evening) with dual impact badges and one-click saving.
-  4. `AssistantPage`: Grounded conversational interface with prompt suggestion pills and context attribution.
-  5. `IndoorGuidePage`: Interactive room/appliance sizing (CADR calculator), ventilation timing, and ozone warnings.
-  6. `SustainablePlannerPage`: Clean commute calculator with avoided CO2 and PM2.5 emissions.
-  7. `ImpactExplainerPage`: Interactive scientific comparison between personal exposure shielding and environmental emission reduction.
-  8. `FamilyCommunityPage`: Household composition preferences and privacy-safe shareable air quality briefings.
-  9. `SavedActionsPage`: Interactive checklist with progress percentage, export summary, and deletion controls.
-
----
-
-## 3. Data Integrity & Regional Standards
-
-1. **Regional Standard Selection**:
-   - For Indian geographic coordinates, AirWise AI applies the official Indian Central Pollution Control Board (CPCB) NAQI standard derived from validated PM2.5 and PM10 concentration breakpoints.
-   - For other global locations, the US EPA Air Quality Index scale is applied.
-   - The index standard is always prominently labeled (e.g. `CPCB_AQI` or `US_AQI`) to prevent user confusion.
-2. **Missing Pollutant Integrity**:
-   - If a monitoring station does not report a specific pollutant (e.g., SO2 or CO), the value is preserved as `null` and displayed as "Not Reported by Station".
-   - AirWise AI **never** substitutes `0` for missing values.
-3. **Dual Impact Distinction**:
-   - **Personal Exposure Benefit**: Explains biological lung protection (e.g., N95 respirators, HEPA filters).
-   - **Environmental Emission Benefit**: Explains source pollution prevention (e.g., switching from private cars to metro transit).
-
+- Built with React 18, Vite (route-level `React.lazy` splitting), and Tailwind CSS (zero inline `style={{}}` attributes).
+- **Pages (`client/src/pages/`)**: `DashboardPage`, `LandingPage`, `DailyPlanPage`, `AssistantPage`, `IndoorGuidePage`, `SustainablePlannerPage`, `ImpactExplainerPage`, `FamilyCommunityPage`, and `SavedActionsPage`.
+- **Reusable Components (`client/src/components/`)**: `Navbar`, `Footer`, `LocationModal`, `AQIBadge`, `PollutantCard`, `ForecastChart`, `SafetyAlertBanner`, `ImpactCard`, `ActionCard`, `InlineFeedbackBanner`, and `CommunityBriefingCard`.

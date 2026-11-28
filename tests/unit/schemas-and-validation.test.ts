@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from 'vitest';
 import {
   LocationCoordinatesSchema,
@@ -66,6 +67,9 @@ describe('Zod Schemas and Input Validation Unit Tests', () => {
     expect(merged.commuteDistanceKm).toBe(18);
     expect(merged.hasAirPurifier).toBe(true);
     expect(merged.purifierFilterType).toBe('HEPA');
+
+    const fromNull = mergeHouseholdPreferences(null, { indoorCombustionSources: ['candles'] });
+    expect(fromNull.indoorCombustionSources).toEqual(['candles']);
   });
 });
 

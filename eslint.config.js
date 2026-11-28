@@ -10,6 +10,12 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
+    rules: {
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-explicit-any': 'error'
+    }
+  },
+  {
     files: ['client/src/**/*.{ts,tsx}'],
     plugins: {
       'react-hooks': reactHooks,
@@ -17,15 +23,7 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      ...jsxA11y.flatConfigs.recommended.rules,
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }]
-    }
-  },
-  {
-    files: ['server/src/**/*.ts', 'shared/**/*.ts', 'tests/**/*.{ts,tsx}'],
-    rules: {
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-      '@typescript-eslint/no-explicit-any': 'error'
+      ...jsxA11y.flatConfigs.recommended.rules
     }
   }
 );

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { api, ApiError, isAbortError, primeDefaultAirQuality } from '../../client/src/services/api';
 import { ProviderFactory } from '../../server/src/providers/ProviderFactory.js';
@@ -74,7 +75,7 @@ describe('Client API Service & ProviderFactory Tests', () => {
       expect(String(fetchSpy.mock.calls[7][0])).toContain('a%2F1');
     });
 
-    it('throws structured ApiError on non-OK HTTP, network error, and rethrows AbortError intact', async () => {
+    it('throws structured ApiError on non-OK HTTP, non-JSON error field, network error, and rethrows AbortError intact', async () => {
       vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
         new Response(JSON.stringify({ message: 'Validation failed' }), { status: 400 })
       );
@@ -82,6 +83,22 @@ describe('Client API Service & ProviderFactory Tests', () => {
         name: 'ApiError',
         status: 400,
         message: 'Validation failed'
+      });
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: 'Upstream Error' }), { status: 502 })
+      );
+      await expect(api.getAirQuality({ city: 'Y' })).rejects.toMatchObject({
+        name: 'ApiError',
+        status: 502,
+        message: 'Upstream Error'
+      });
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('not-json', { status: 503 }));
+      await expect(api.getAirQuality({ city: 'Z' })).rejects.toMatchObject({
+        name: 'ApiError',
+        status: 503,
+        message: 'Request failed with status 503'
       });
 
       vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new TypeError('Failed to fetch'));
